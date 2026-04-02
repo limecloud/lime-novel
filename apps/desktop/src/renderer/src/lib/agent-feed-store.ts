@@ -39,6 +39,24 @@ class AgentFeedStore {
     this.emit()
   }
 
+  syncFromShell(nextState: AgentFeedState): void {
+    const localFeed = this.state.feed.filter((item) => item.taskId === 'local')
+    const mergedFeed = [...nextState.feed]
+
+    for (const item of localFeed) {
+      if (!mergedFeed.some((existing) => existing.itemId === item.itemId)) {
+        mergedFeed.unshift(item)
+      }
+    }
+
+    this.state = {
+      header: nextState.header,
+      tasks: nextState.tasks,
+      feed: mergedFeed
+    }
+    this.emit()
+  }
+
   applyEvent(event: TaskEventDto): void {
     if (event.type === 'task.updated') {
       const nextTasks = [...this.state.tasks]
@@ -103,4 +121,3 @@ export const agentFeedStore = new AgentFeedStore()
 
 export const useAgentFeedState = (): AgentFeedState =>
   useSyncExternalStore(agentFeedStore.subscribe, agentFeedStore.getSnapshot)
-

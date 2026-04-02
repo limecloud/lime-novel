@@ -1,6 +1,6 @@
-export type NovelSurfaceId = 'home' | 'writing' | 'canon' | 'revision' | 'publish'
+export type NovelSurfaceId = 'home' | 'writing' | 'analysis' | 'canon' | 'revision' | 'publish'
 
-export type NovelAgentType = 'project' | 'chapter' | 'canon' | 'revision' | 'publish'
+export type NovelAgentType = 'project' | 'chapter' | 'analysis' | 'canon' | 'revision' | 'publish'
 
 export type TaskStatus = 'queued' | 'running' | 'waiting_approval' | 'completed' | 'failed'
 
@@ -94,4 +94,3 @@ export type ExportPreset = {
   status: 'draft' | 'ready'
   summary: string
 }
-

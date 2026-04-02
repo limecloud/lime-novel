@@ -1,12 +1,14 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import type {
+  ApplyProjectStrategyProposalInputDto,
   CommitCanonCardInputDto,
   CreateProjectInputDto,
   CreateExportPackageInputDto,
   SaveChapterInputDto,
   StartTaskInputDto,
   UpdateRevisionIssueInputDto,
-  UpdateWorkspaceContextInputDto
+  UpdateWorkspaceContextInputDto,
+  WorkspaceSearchInputDto
 } from '@lime-novel/application'
 import type { DesktopServices } from '../composition-root/create-desktop-services'
 import { CHANNELS } from './channels'
@@ -21,18 +23,26 @@ const removeHandler = (channel: string): void => {
 
 export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopServices): (() => void) => {
   removeHandler(CHANNELS.workspace.loadShell)
+  removeHandler(CHANNELS.workspace.searchWorkspace)
   removeHandler(CHANNELS.workspace.updateContext)
   removeHandler(CHANNELS.workspace.createProject)
   removeHandler(CHANNELS.workspace.openProjectDialog)
   removeHandler(CHANNELS.chapter.loadDocument)
   removeHandler(CHANNELS.chapter.saveDocument)
   removeHandler(CHANNELS.chapter.applyProposal)
+  removeHandler(CHANNELS.chapter.rejectProposal)
+  removeHandler(CHANNELS.analysis.importSample)
+  removeHandler(CHANNELS.analysis.applyStrategyProposal)
   removeHandler(CHANNELS.canon.commitCard)
   removeHandler(CHANNELS.revision.updateIssue)
+  removeHandler(CHANNELS.revision.undoRecord)
   removeHandler(CHANNELS.publish.createExportPackage)
   removeHandler(CHANNELS.agent.startTask)
 
   ipcMain.handle(CHANNELS.workspace.loadShell, async () => services.loadWorkspaceShell())
+  ipcMain.handle(CHANNELS.workspace.searchWorkspace, async (_event, input: WorkspaceSearchInputDto) =>
+    services.searchWorkspace(input)
+  )
   ipcMain.handle(CHANNELS.workspace.updateContext, async (_event, input: UpdateWorkspaceContextInputDto) =>
     services.updateWorkspaceContext(input)
   )
@@ -49,12 +59,20 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   ipcMain.handle(CHANNELS.chapter.applyProposal, async (_event, proposalId: string) =>
     services.applyProposal(proposalId)
   )
+  ipcMain.handle(CHANNELS.chapter.rejectProposal, async (_event, proposalId: string) =>
+    services.rejectProposal(proposalId)
+  )
+  ipcMain.handle(CHANNELS.analysis.importSample, async () => services.importAnalysisSample())
+  ipcMain.handle(CHANNELS.analysis.applyStrategyProposal, async (_event, input: ApplyProjectStrategyProposalInputDto) =>
+    services.applyProjectStrategyProposal(input)
+  )
   ipcMain.handle(CHANNELS.canon.commitCard, async (_event, input: CommitCanonCardInputDto) =>
     services.commitCanonCard(input)
   )
   ipcMain.handle(CHANNELS.revision.updateIssue, async (_event, input: UpdateRevisionIssueInputDto) =>
     services.updateRevisionIssue(input)
   )
+  ipcMain.handle(CHANNELS.revision.undoRecord, async (_event, recordId: string) => services.undoRevisionRecord(recordId))
   ipcMain.handle(CHANNELS.publish.createExportPackage, async (_event, input: CreateExportPackageInputDto) =>
     services.createExportPackage(input)
   )

@@ -18,6 +18,8 @@ export type ProjectSummaryDto = {
   status: string
   genre: string
   premise: string
+  releaseVersion: string
+  lastPublishedAt?: string
   currentSurface: NovelSurfaceId
   currentChapterId: string
 }
@@ -58,6 +60,26 @@ export type RevisionIssueDto = {
   status: 'open' | 'deferred' | 'resolved'
 }
 
+export type RevisionRecordStatus = 'applied' | 'undone'
+
+export type RevisionRecordDto = {
+  recordId: string
+  proposalId: string
+  chapterId: string
+  chapterTitle: string
+  title: string
+  summary: string
+  beforePreview: string
+  afterPreview: string
+  sourceSurface: NovelSurfaceId
+  linkedIssueId?: string
+  status: RevisionRecordStatus
+  canUndo: boolean
+  snapshotPath: string
+  createdAt: string
+  undoneAt?: string
+}
+
 export type ExportPresetDto = {
   presetId: string
   title: string
@@ -66,10 +88,47 @@ export type ExportPresetDto = {
   summary: string
 }
 
+export type AnalysisScoreDto = {
+  hookStrength: number
+  characterHeat: number
+  pacingMomentum: number
+  feedbackResonance: number
+}
+
+export type AnalysisSampleDto = {
+  sampleId: string
+  title: string
+  author: string
+  sourceLabel: string
+  synopsis: string
+  excerpt: string[]
+  comments: string[]
+  tags: string[]
+  importedAt: string
+  scores: AnalysisScoreDto
+  hookSummary: string
+  characterSummary: string
+  pacingSummary: string
+  readerSignals: string[]
+  riskSignals: string[]
+  inspirationSignals: string[]
+}
+
+export type AnalysisOverviewDto = {
+  sampleCount: number
+  dominantTags: string[]
+  strongestSignals: string[]
+  cautionSignals: string[]
+  projectAngles: string[]
+  averageScores: AnalysisScoreDto
+}
+
 export type HomeHighlightDto = {
   title: string
   detail: string
 }
+
+export type ProposalApprovalStatus = 'pending' | 'accepted' | 'rejected'
 
 export type FeedActionDto =
   | {
@@ -77,12 +136,36 @@ export type FeedActionDto =
       label: string
       kind: 'prompt'
       prompt: string
+      surface?: NovelSurfaceId
     }
   | {
       id: string
       label: string
       kind: 'apply-proposal'
       proposalId: string
+    }
+  | {
+      id: string
+      label: string
+      kind: 'reject-proposal'
+      proposalId: string
+    }
+  | {
+      id: string
+      label: string
+      kind: 'apply-publish-synopsis'
+      value: string
+    }
+  | {
+      id: string
+      label: string
+      kind: 'apply-publish-notes'
+      value: string
+    }
+  | {
+      id: string
+      label: string
+      kind: 'open-publish-confirm'
     }
 
 export type AgentFeedItemDto = {
@@ -95,6 +178,8 @@ export type AgentFeedItemDto = {
   severity?: RiskLevel
   proposalId?: string
   approvalId?: string
+  approvalStatus?: ProposalApprovalStatus
+  linkedIssueId?: string
   diffPreview?: {
     before: string
     after: string
@@ -129,15 +214,62 @@ export type QuickActionDto = {
 export type ExportHistoryDto = {
   exportId: string
   presetId: string
+  versionTag: string
+  format: 'markdown' | 'pdf' | 'epub'
   generatedAt: string
+  synopsis: string
+  splitChapters: number
+  notes: string
+  platformFeedback: string[]
+  previousVersionTag?: string
+  fileCount: number
+  files: string[]
   outputDir: string
   manifestPath: string
+}
+
+export type ExportComparisonDto = {
+  currentExportId: string
+  previousExportId: string
+  currentVersionTag: string
+  previousVersionTag: string
+  currentGeneratedAt: string
+  previousGeneratedAt: string
+  summary: string
+  riskLevel: RiskLevel
+  changedFields: string[]
+  synopsisDelta: number
+  splitChaptersDelta: number
+  fileCountDelta: number
+  addedFeedback: string[]
+  removedFeedback: string[]
 }
 
 export type OpenProjectResultDto = {
   workspacePath: string
   projectId: string
   title: string
+}
+
+export type WorkspaceSearchInputDto = {
+  query: string
+  limit?: number
+}
+
+export type WorkspaceSearchItemDto = {
+  itemId: string
+  kind: 'project' | 'chapter' | 'scene' | 'analysis-sample' | 'canon-card' | 'revision-issue' | 'export-preset'
+  title: string
+  snippet: string
+  surface: NovelSurfaceId
+  chapterId?: string
+  entityId?: string
+  score: number
+}
+
+export type WorkspaceSearchResultDto = {
+  query: string
+  items: WorkspaceSearchItemDto[]
 }
 
 export type CreateProjectInputDto = {
@@ -160,14 +292,18 @@ export type WorkspaceShellDto = {
   chapterTree: ChapterListItemDto[]
   sceneList: SceneListItemDto[]
   homeHighlights: HomeHighlightDto[]
+  analysisOverview: AnalysisOverviewDto
+  analysisSamples: AnalysisSampleDto[]
   canonCandidates: CanonCandidateDto[]
   revisionIssues: RevisionIssueDto[]
+  revisionRecords: RevisionRecordDto[]
   exportPresets: ExportPresetDto[]
   agentHeader: AgentHeaderDto
   agentTasks: AgentTaskDto[]
   agentFeed: AgentFeedItemDto[]
   quickActions: QuickActionDto[]
   recentExports: ExportHistoryDto[]
+  latestExportComparison?: ExportComparisonDto
 }
 
 export type ChapterDocumentDto = {
@@ -183,6 +319,12 @@ export type ApplyProposalResultDto = {
   chapterId: string
   proposalId: string
   content: string
+  summary: string
+}
+
+export type RejectProposalResultDto = {
+  chapterId: string
+  proposalId: string
   summary: string
 }
 
@@ -227,16 +369,47 @@ export type UpdateRevisionIssueResultDto = {
   summary: string
 }
 
+export type UndoRevisionRecordResultDto = {
+  recordId: string
+  chapterId: string
+  content: string
+  summary: string
+}
+
 export type CreateExportPackageInputDto = {
   presetId: string
   synopsis: string
   splitChapters: number
+  versionTag: string
+  notes: string
 }
 
 export type CreateExportPackageResultDto = {
   presetId: string
+  versionTag: string
   outputDir: string
   manifestPath: string
+  summary: string
+}
+
+export type ImportAnalysisSampleInputDto = {
+  filePath: string
+}
+
+export type ImportAnalysisSampleResultDto = {
+  sampleId: string
+  title: string
+  summary: string
+}
+
+export type ApplyProjectStrategyProposalInputDto = {
+  sampleId: string
+}
+
+export type ApplyProjectStrategyProposalResultDto = {
+  sampleId: string
+  createdCanonCardIds: string[]
+  createdQuickActionIds: string[]
   summary: string
 }
 

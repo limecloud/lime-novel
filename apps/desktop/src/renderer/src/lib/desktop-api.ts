@@ -1,5 +1,11 @@
 import type { DesktopApiContract } from '@lime-novel/application'
-import { createBrowserFallbackApi } from './browser-fallback'
 
-export const desktopApi: DesktopApiContract =
-  typeof window !== 'undefined' && window.limeNovel ? window.limeNovel : createBrowserFallbackApi()
+const resolveDesktopApi = (): DesktopApiContract => {
+  if (typeof window === 'undefined' || !window.limeNovel) {
+    throw new Error('Lime Novel 桌面桥接未就绪，请通过 Electron 桌面应用启动。')
+  }
+
+  return window.limeNovel
+}
+
+export const desktopApi: DesktopApiContract = resolveDesktopApi()

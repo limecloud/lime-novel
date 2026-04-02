@@ -5,6 +5,9 @@ import { desktopApi } from '../lib/desktop-api'
 import { agentFeedStore, useAgentFeedState } from '../lib/agent-feed-store'
 import { queryClient } from '../lib/query-client'
 import { NovelWorkbench } from '../features/workbench/NovelWorkbench'
+import type { AgentSidebarMode } from '../features/agent-feed/AgentSidebar'
+import limeLogoUrl from '../assets/logo-lime.png'
+import { limeNovelBrand } from './branding'
 
 const surfaceHeaderFallback = {
   home: {
@@ -17,6 +20,12 @@ const surfaceHeaderFallback = {
     currentAgent: '章节代理',
     activeSubAgent: '设定扫描子代理',
     memorySources: ['本章目标', '当前场景', '人物画像', '最近提议'],
+    riskLevel: 'medium' as const
+  },
+  analysis: {
+    currentAgent: '拆书代理',
+    activeSubAgent: '样本建模子代理',
+    memorySources: ['样本文本', '题材词', '结构信号', '项目 premise'],
     riskLevel: 'medium' as const
   },
   canon: {
@@ -39,11 +48,16 @@ const surfaceHeaderFallback = {
   }
 }
 
+const resolveSidebarModeForSurface = (surface: NovelSurfaceId): AgentSidebarMode =>
+  surface === 'writing' ? 'dialogue' : 'suggestions'
+
 export const App = () => {
   const [activeSurface, setActiveSurface] = useState<NovelSurfaceId>('home')
-  const [sidebarMode, setSidebarMode] = useState<'suggestions' | 'dialogue'>('suggestions')
+  const [sidebarMode, setSidebarMode] = useState<AgentSidebarMode>('suggestions')
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)
+  const [backgroundAutomationCount, setBackgroundAutomationCount] = useState(0)
   const lastHydratedWorkspaceKeyRef = useRef<string | null>(null)
+  const autoMaintenanceKeysRef = useRef(new Set<string>())
   const feedState = useAgentFeedState()
 
   const shellQuery = useQuery({
@@ -51,7 +65,60 @@ export const App = () => {
     queryFn: () => desktopApi.workspace.loadShell()
   })
 
-  const activeWorkspacePath = shellQuery.data?.workspacePath ?? 'fallback-workspace'
+  const activeWorkspacePath = shellQuery.data?.workspacePath ?? ''
+
+  const triggerPostSaveAutomation = (chapterId: string) => {
+    if (!activeWorkspacePath) {
+      return
+    }
+
+    const automationKey = `${activeWorkspacePath}::${chapterId}`
+
+    if (autoMaintenanceKeysRef.current.has(automationKey)) {
+      return
+    }
+
+    autoMaintenanceKeysRef.current.add(automationKey)
+    setBackgroundAutomationCount((count) => count + 1)
+    agentFeedStore.addLocalStatus(
+      '后台整理已启动',
+      '设定代理与修订代理正在同步候选卡和问题队列。',
+      `章节 ${chapterId}`
+    )
+
+    void (async () => {
+      const maintenanceTasks: Array<{ surface: NovelSurfaceId; intent: string }> = [
+        {
+          surface: 'canon',
+          intent: '请把当前章节新增的角色、物件和规则提炼成候选设定卡，并标出证据。'
+        },
+        {
+          surface: 'revision',
+          intent: '请检查本章是否出现连续性、视角或节奏问题，并把问题写回修订队列。'
+        }
+      ]
+
+      for (const task of maintenanceTasks) {
+        try {
+          await desktopApi.agent.startTask({
+            surface: task.surface,
+            intent: task.intent,
+            chapterId
+          })
+        } catch (error) {
+          agentFeedStore.addLocalStatus(
+            `${task.surface === 'canon' ? '设定' : '修订'}后台更新失败`,
+            error instanceof Error ? error.message : '后台自动更新没有执行成功。',
+            chapterId
+          )
+        }
+      }
+
+      autoMaintenanceKeysRef.current.delete(automationKey)
+      setBackgroundAutomationCount((count) => Math.max(0, count - 1))
+      void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+    })()
+  }
 
   const chapterQuery = useQuery({
     queryKey: ['chapter-document', activeWorkspacePath, activeChapterId],
@@ -60,12 +127,23 @@ export const App = () => {
   })
 
   const startTaskMutation = useMutation({
-    mutationFn: (intent: string) =>
+    mutationFn: (payload: { intent: string; surface: NovelSurfaceId; chapterId?: string }) =>
       desktopApi.agent.startTask({
-        surface: activeSurface,
-        intent,
-        chapterId: activeChapterId ?? undefined
-      })
+        surface: payload.surface,
+        intent: payload.intent,
+        chapterId: payload.chapterId
+      }),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      agentFeedStore.addLocalStatus('代理任务已启动', result.task.title, result.task.summary)
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        '代理任务启动失败',
+        error instanceof Error ? error.message : '当前任务暂时无法启动。',
+        '请稍后重试'
+      )
+    }
   })
 
   const updateContextMutation = useMutation({
@@ -84,7 +162,7 @@ export const App = () => {
       lastHydratedWorkspaceKeyRef.current = null
       setActiveSurface('home')
       setActiveChapterId(null)
-      setSidebarMode('suggestions')
+      setSidebarMode(resolveSidebarModeForSurface('home'))
       queryClient.removeQueries({ queryKey: ['chapter-document'] })
       await queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
       agentFeedStore.addLocalStatus('项目已创建', result.title, result.workspacePath)
@@ -108,7 +186,7 @@ export const App = () => {
       lastHydratedWorkspaceKeyRef.current = null
       setActiveSurface('home')
       setActiveChapterId(null)
-      setSidebarMode('suggestions')
+      setSidebarMode(resolveSidebarModeForSurface('home'))
       queryClient.removeQueries({ queryKey: ['chapter-document'] })
       await queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
       agentFeedStore.addLocalStatus('项目已打开', result.title, result.workspacePath)
@@ -138,6 +216,47 @@ export const App = () => {
       )
       void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
       agentFeedStore.addLocalStatus('正文已保存', result.summary, `${result.lastEditedAt} · ${result.wordCount} 字`)
+      triggerPostSaveAutomation(result.chapterId)
+    }
+  })
+
+  const importAnalysisSampleMutation = useMutation({
+    mutationFn: () => desktopApi.analysis.importSample(),
+    onSuccess: async (result) => {
+      if (!result) {
+        return
+      }
+
+      setActiveSurface('analysis')
+      setSidebarMode(resolveSidebarModeForSurface('analysis'))
+      await queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      agentFeedStore.addLocalStatus('爆款样本已导入', result.summary, result.title)
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        '导入样本失败',
+        error instanceof Error ? error.message : '当前样本暂时没有完成导入。',
+        '请选择一个 .txt 或 .md 文件后重试。'
+      )
+    }
+  })
+
+  const applyProjectStrategyProposalMutation = useMutation({
+    mutationFn: (payload: { sampleId: string }) => desktopApi.analysis.applyStrategyProposal(payload),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      agentFeedStore.addLocalStatus(
+        '拆书结论已回写',
+        result.summary,
+        `${result.createdCanonCardIds.length} 张候选卡 · ${result.createdQuickActionIds.length} 个快捷动作`
+      )
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        '回写项目策略失败',
+        error instanceof Error ? error.message : '当前拆书结论暂时无法回写。',
+        '请稍后重试'
+      )
     }
   })
 
@@ -156,6 +275,15 @@ export const App = () => {
       void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
       void queryClient.invalidateQueries({ queryKey: ['chapter-document', activeWorkspacePath, result.chapterId] })
       agentFeedStore.addLocalStatus('提议已应用', result.summary, '正文草稿已同步更新')
+      triggerPostSaveAutomation(result.chapterId)
+    }
+  })
+
+  const rejectProposalMutation = useMutation({
+    mutationFn: (proposalId: string) => desktopApi.chapter.rejectProposal(proposalId),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      agentFeedStore.addLocalStatus('提议已拒绝', result.summary, result.proposalId)
     }
   })
 
@@ -177,18 +305,65 @@ export const App = () => {
     }
   })
 
-  const createExportPackageMutation = useMutation({
-    mutationFn: (payload: { presetId: string; synopsis: string; splitChapters: number }) =>
-      desktopApi.publish.createExportPackage(payload),
+  const undoRevisionRecordMutation = useMutation({
+    mutationFn: (recordId: string) => desktopApi.revision.undoRecord(recordId),
     onSuccess: (result) => {
+      setActiveChapterId(result.chapterId)
+      queryClient.setQueryData(['chapter-document', activeWorkspacePath, result.chapterId], (previous) =>
+        previous && typeof previous === 'object'
+          ? {
+              ...(previous as Record<string, unknown>),
+              content: result.content,
+              wordCount: result.content.length
+            }
+          : previous
+      )
       void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
-      agentFeedStore.addLocalStatus('导出包已生成', result.summary, result.outputDir)
+      void queryClient.invalidateQueries({ queryKey: ['chapter-document', activeWorkspacePath, result.chapterId] })
+      agentFeedStore.addLocalStatus('修订已撤销', result.summary, result.recordId)
+      triggerPostSaveAutomation(result.chapterId)
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        '撤销修订失败',
+        error instanceof Error ? error.message : '当前修订记录暂时不能直接撤销。',
+        '请先比较当前正文与修订快照。'
+      )
+    }
+  })
+
+  const createExportPackageMutation = useMutation({
+    mutationFn: (payload: {
+      presetId: string
+      synopsis: string
+      splitChapters: number
+      versionTag: string
+      notes: string
+    }) =>
+      desktopApi.publish.createExportPackage(payload),
+    onSuccess: async (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      agentFeedStore.addLocalStatus('导出包已生成', result.summary, `${result.versionTag} · ${result.outputDir}`)
+
+      try {
+        await desktopApi.agent.startTask({
+          surface: 'publish',
+          intent: '请复核这次导出结果并同步平台反馈与最终确认建议。'
+        })
+      } catch (error) {
+        agentFeedStore.addLocalStatus(
+          '发布复核未自动完成',
+          error instanceof Error ? error.message : '导出后的发布复核暂时没有成功启动。',
+          result.versionTag
+        )
+      }
     }
   })
 
   useEffect(() => {
     const unsubscribe = desktopApi.agent.subscribeTaskEvents((event) => {
       agentFeedStore.applyEvent(event)
+      void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
     })
 
     return () => {
@@ -206,6 +381,11 @@ export const App = () => {
     const workspaceKey = `${shell.workspacePath}::${shell.project.projectId}`
 
     if (workspaceKey === lastHydratedWorkspaceKeyRef.current) {
+      agentFeedStore.syncFromShell({
+        header: shell.agentHeader,
+        tasks: shell.agentTasks,
+        feed: shell.agentFeed
+      })
       return
     }
 
@@ -251,8 +431,24 @@ export const App = () => {
       return '正在保存正文'
     }
 
+    if (importAnalysisSampleMutation.isPending) {
+      return '正在导入爆款样本'
+    }
+
+    if (applyProjectStrategyProposalMutation.isPending) {
+      return '正在回写项目策略'
+    }
+
+    if (backgroundAutomationCount > 0) {
+      return '后台正在同步设定与修订'
+    }
+
     if (applyProposalMutation.isPending) {
       return '正在应用提议'
+    }
+
+    if (rejectProposalMutation.isPending) {
+      return '正在拒绝提议'
     }
 
     if (commitCanonCardMutation.isPending) {
@@ -261,6 +457,10 @@ export const App = () => {
 
     if (updateRevisionIssueMutation.isPending) {
       return '正在更新修订队列'
+    }
+
+    if (undoRevisionRecordMutation.isPending) {
+      return '正在撤销修订'
     }
 
     if (createExportPackageMutation.isPending) {
@@ -275,23 +475,51 @@ export const App = () => {
   }, [
     activeChapterId,
     applyProposalMutation.isPending,
+    applyProjectStrategyProposalMutation.isPending,
+    backgroundAutomationCount,
     chapterQuery.isFetching,
     commitCanonCardMutation.isPending,
     createProjectMutation.isPending,
     createExportPackageMutation.isPending,
+    importAnalysisSampleMutation.isPending,
     openProjectMutation.isPending,
+    rejectProposalMutation.isPending,
     saveChapterMutation.isPending,
+    undoRevisionRecordMutation.isPending,
     updateRevisionIssueMutation.isPending
   ])
+
+  if (shellQuery.isError) {
+    return (
+      <div className="loading-screen">
+        <div className="loading-card">
+          <img className="brand-mark brand-mark--loading" src={limeLogoUrl} alt="Lime Novel 标志" />
+          <span className="eyebrow">{limeNovelBrand.name}</span>
+          <h1>工作台启动失败</h1>
+          <p className="loading-card__slogan">{limeNovelBrand.slogan}</p>
+          <p>
+            {shellQuery.error instanceof Error
+              ? shellQuery.error.message
+              : '当前工作区暂时没有完成装配，请重试一次。'}
+          </p>
+          <div className="hero-actions">
+            <button className="primary-button" onClick={() => void shellQuery.refetch()}>
+              重新加载工作台
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (shellQuery.isLoading || !shellQuery.data) {
     return (
       <div className="loading-screen">
         <div className="loading-card">
-          <img className="brand-mark brand-mark--loading" src="/logo-lime-192.png" alt="Lime Novel 标志" />
-          <span className="eyebrow">Lime Novel</span>
+          <img className="brand-mark brand-mark--loading" src={limeLogoUrl} alt="Lime Novel 标志" />
+          <span className="eyebrow">{limeNovelBrand.name}</span>
           <h1>正在整理小说工作台...</h1>
-          <p className="loading-card__slogan">青柠一下，灵感即来</p>
+          <p className="loading-card__slogan">{limeNovelBrand.slogan}</p>
           <p>项目壳、代理侧栏和章节上下文正在接驳。</p>
         </div>
       </div>
@@ -309,17 +537,16 @@ export const App = () => {
       activityLabel={workspaceActivityLabel}
       isCreatingProject={createProjectMutation.isPending}
       isOpeningProject={openProjectMutation.isPending}
+      isImportingAnalysisSample={importAnalysisSampleMutation.isPending}
+      isApplyingAnalysisStrategy={applyProjectStrategyProposalMutation.isPending}
+      isCreatingExportPackage={createExportPackageMutation.isPending}
       onSurfaceChange={(surface) => {
         setActiveSurface(surface)
+        setSidebarMode(resolveSidebarModeForSurface(surface))
         updateContextMutation.mutate({
           surface,
           chapterId: activeChapterId ?? undefined
         })
-        if (surface === 'writing') {
-          setSidebarMode('dialogue')
-        } else {
-          setSidebarMode('suggestions')
-        }
       }}
       onOpenProject={() => {
         openProjectMutation.mutate()
@@ -338,21 +565,46 @@ export const App = () => {
         })
       }}
       onInspectRevisionIssueChapter={(chapterId) => {
+        setActiveSurface('revision')
+        setSidebarMode(resolveSidebarModeForSurface('revision'))
         setActiveChapterId(chapterId)
         updateContextMutation.mutate({
           surface: 'revision',
           chapterId
         })
       }}
-      onStartTask={(intent) => {
+      onStartTask={(intent, surface) => {
+        const nextSurface = surface ?? activeSurface
+
+        if (nextSurface !== activeSurface) {
+          setActiveSurface(nextSurface)
+        }
+
         setSidebarMode('dialogue')
-        startTaskMutation.mutate(intent)
+        updateContextMutation.mutate({
+          surface: nextSurface,
+          chapterId: activeChapterId ?? undefined
+        })
+        startTaskMutation.mutate({
+          intent,
+          surface: nextSurface,
+          chapterId: activeChapterId ?? undefined
+        })
       }}
       onApplyProposal={(proposalId) => {
         applyProposalMutation.mutate(proposalId)
       }}
+      onRejectProposal={(proposalId) => {
+        rejectProposalMutation.mutate(proposalId)
+      }}
       onSaveChapter={(chapterId, content) => {
         saveChapterMutation.mutate({ chapterId, content })
+      }}
+      onImportAnalysisSample={() => {
+        importAnalysisSampleMutation.mutate()
+      }}
+      onApplyProjectStrategyProposal={(payload) => {
+        applyProjectStrategyProposalMutation.mutate(payload)
       }}
       onCommitCanonCard={(cardId, visibility) => {
         commitCanonCardMutation.mutate({ cardId, visibility })
@@ -360,8 +612,11 @@ export const App = () => {
       onUpdateRevisionIssue={(issueId, status) => {
         updateRevisionIssueMutation.mutate({ issueId, status })
       }}
-      onCreateExportPackage={(presetId, synopsis, splitChapters) => {
-        createExportPackageMutation.mutate({ presetId, synopsis, splitChapters })
+      onUndoRevisionRecord={(recordId) => {
+        undoRevisionRecordMutation.mutate(recordId)
+      }}
+      onCreateExportPackage={(payload) => {
+        createExportPackageMutation.mutate(payload)
       }}
     />
   )

@@ -1,6 +1,6 @@
 {
   "name": "lime-novel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Lime Novel desktop workspace",
   "main": "./out/main/index.js",
@@ -12,8 +12,13 @@
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
+    "version:sync": "node scripts/sync-version.mjs",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && electron-vite build",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
+    "dist:win": "npm run build && electron-builder --win nsis zip --publish never",
+    "dist:linux": "npm run build && electron-builder --linux AppImage tar.gz --publish never",
     "verify:local": "npm run build",
     "verify:gui-smoke": "node scripts/gui-smoke.mjs"
   },
@@ -31,6 +36,7 @@
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.0.4",
     "electron": "^39.8.5",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^4.0.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

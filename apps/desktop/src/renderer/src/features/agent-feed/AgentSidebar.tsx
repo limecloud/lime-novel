@@ -2,9 +2,12 @@ import { useState } from 'react'
 import type { AgentFeedItemDto, AgentTaskDto, QuickActionDto } from '@lime-novel/application'
 import type { NovelSurfaceId } from '@lime-novel/domain-novel'
 
+export type AgentSidebarMode = 'agent' | 'suggestions' | 'dialogue'
+
 type AgentSidebarProps = {
-  mode: 'suggestions' | 'dialogue'
-  onModeChange: (mode: 'suggestions' | 'dialogue') => void
+  className?: string
+  mode: AgentSidebarMode
+  onModeChange: (mode: AgentSidebarMode) => void
   header: {
     currentAgent: string
     activeSubAgent?: string
@@ -15,8 +18,12 @@ type AgentSidebarProps = {
   tasks: AgentTaskDto[]
   feed: AgentFeedItemDto[]
   quickActions: QuickActionDto[]
-  onStartTask: (intent: string) => void
+  onStartTask: (intent: string, surface?: NovelSurfaceId) => void
   onApplyProposal: (proposalId: string) => void
+  onRejectProposal: (proposalId: string) => void
+  onApplyPublishSynopsisDraft: (value: string) => void
+  onApplyPublishNotesDraft: (value: string) => void
+  onOpenPublishConfirm: () => void
 }
 
 const statusLabel: Record<AgentTaskDto['status'], string> = {
@@ -44,24 +51,81 @@ const feedKindLabel: Record<AgentFeedItemDto['kind'], string> = {
 const surfaceLabel: Record<NovelSurfaceId, string> = {
   home: '首页',
   writing: '写作',
+  analysis: '拆书',
   canon: '设定',
   revision: '修订',
   publish: '发布'
 }
 
+const approvalStatusLabel: Record<NonNullable<AgentFeedItemDto['approvalStatus']>, string> = {
+  pending: '待确认',
+  accepted: '已接受',
+  rejected: '已拒绝'
+}
+
+const parseCreatedAt = (value: string): number => {
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? 0 : timestamp
+}
+
+const dedupeTasks = (tasks: AgentTaskDto[]): AgentTaskDto[] => {
+  const seen = new Set<string>()
+
+  return tasks.filter((task) => {
+    const key = `${task.surface}:${task.title}:${task.summary}`
+
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
+}
+
+const dedupeFeed = (items: AgentFeedItemDto[]): AgentFeedItemDto[] => {
+  const seen = new Set<string>()
+
+  return items.filter((item) => {
+    const key = `${item.kind}:${item.title}:${item.body}:${item.supportingLabel ?? ''}`
+
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
+}
+
 const FeedCard = ({
   item,
   onStartTask,
-  onApplyProposal
+  onApplyProposal,
+  onRejectProposal,
+  onApplyPublishSynopsisDraft,
+  onApplyPublishNotesDraft,
+  onOpenPublishConfirm
 }: {
   item: AgentFeedItemDto
-  onStartTask: (intent: string) => void
+  onStartTask: (intent: string, surface?: NovelSurfaceId) => void
   onApplyProposal: (proposalId: string) => void
+  onRejectProposal: (proposalId: string) => void
+  onApplyPublishSynopsisDraft: (value: string) => void
+  onApplyPublishNotesDraft: (value: string) => void
+  onOpenPublishConfirm: () => void
 }) => (
   <article className={`feed-card feed-card--${item.kind}`}>
     <div className="feed-card__meta">
       <span className="feed-card__kind">{feedKindLabel[item.kind]}</span>
-      {item.severity ? <span className={`feed-card__severity feed-card__severity--${item.severity}`}>{severityLabel[item.severity]}</span> : null}
+      <div className="feed-card__meta-pills">
+        {item.severity ? <span className={`feed-card__severity feed-card__severity--${item.severity}`}>{severityLabel[item.severity]}</span> : null}
+        {item.approvalStatus ? (
+          <span className={`feed-card__approval feed-card__approval--${item.approvalStatus}`}>
+            {approvalStatusLabel[item.approvalStatus]}
+          </span>
+        ) : null}
+      </div>
     </div>
     <h4>{item.title}</h4>
     <p>{item.body}</p>
@@ -82,7 +146,23 @@ const FeedCard = ({
       <div className="feed-card__actions">
         {item.actions.map((action) =>
           action.kind === 'prompt' ? (
-            <button key={action.id} className="ghost-button" onClick={() => onStartTask(action.prompt)}>
+            <button key={action.id} className="ghost-button" onClick={() => onStartTask(action.prompt, action.surface)}>
+              {action.label}
+            </button>
+          ) : action.kind === 'reject-proposal' ? (
+            <button key={action.id} className="ghost-button" onClick={() => onRejectProposal(action.proposalId)}>
+              {action.label}
+            </button>
+          ) : action.kind === 'apply-publish-synopsis' ? (
+            <button key={action.id} className="primary-button" onClick={() => onApplyPublishSynopsisDraft(action.value)}>
+              {action.label}
+            </button>
+          ) : action.kind === 'apply-publish-notes' ? (
+            <button key={action.id} className="primary-button" onClick={() => onApplyPublishNotesDraft(action.value)}>
+              {action.label}
+            </button>
+          ) : action.kind === 'open-publish-confirm' ? (
+            <button key={action.id} className="primary-button" onClick={onOpenPublishConfirm}>
               {action.label}
             </button>
           ) : (
@@ -101,6 +181,7 @@ const FeedCard = ({
 )
 
 export const AgentSidebar = ({
+  className,
   mode,
   onModeChange,
   header,
@@ -108,15 +189,22 @@ export const AgentSidebar = ({
   feed,
   quickActions,
   onStartTask,
-  onApplyProposal
+  onApplyProposal,
+  onRejectProposal,
+  onApplyPublishSynopsisDraft,
+  onApplyPublishNotesDraft,
+  onOpenPublishConfirm
 }: AgentSidebarProps) => {
   const [draft, setDraft] = useState('')
 
-  const suggestionItems = [
+  const visibleTasks = dedupeTasks(tasks).slice(0, 2)
+  const suggestionItems = dedupeFeed([
     ...feed.filter((item) => item.kind === 'proposal' || item.kind === 'issue' || item.kind === 'evidence'),
     ...feed.filter((item) => item.kind === 'status'),
     ...feed.filter((item) => item.kind === 'approval')
-  ].slice(0, 6)
+  ]).slice(0, 4)
+  const dialogueItems = [...feed].sort((left, right) => parseCreatedAt(left.createdAt) - parseCreatedAt(right.createdAt))
+  const visibleQuickActions = quickActions.slice(0, 2)
 
   const handleSubmit = (): void => {
     if (!draft.trim()) {
@@ -128,40 +216,14 @@ export const AgentSidebar = ({
   }
 
   return (
-    <aside className="agent-sidebar">
-      <section className="agent-sidebar__header">
-        <div>
-          <span className="eyebrow">当前主代理</span>
-          <h2>{header.currentAgent}</h2>
-          <p>{header.activeSubAgent ? `活跃子代理：${header.activeSubAgent}` : `当前工作面：${surfaceLabel[header.surface]}`}</p>
-        </div>
-        <div className={`risk-pill risk-pill--${header.riskLevel}`}>{severityLabel[header.riskLevel]}</div>
-      </section>
-
-      <section className="agent-sidebar__memory">
-        {header.memorySources.map((source) => (
-          <span key={source} className="memory-chip">
-            {source}
-          </span>
-        ))}
-      </section>
-
-      <section className="agent-sidebar__tasks">
-        <div className="agent-sidebar__section-heading">
-          <span className="eyebrow">后台任务</span>
-        </div>
-        {tasks.slice(0, 3).map((task) => (
-          <div key={task.taskId} className="task-row">
-            <div>
-              <strong>{task.title}</strong>
-              <p>{task.summary}</p>
-            </div>
-            <span className={`task-status task-status--${task.status}`}>{statusLabel[task.status]}</span>
-          </div>
-        ))}
-      </section>
-
+    <aside className={className ? `agent-sidebar ${className}` : 'agent-sidebar'}>
       <div className="agent-sidebar__tabs">
+        <button
+          className={mode === 'agent' ? 'tab-button tab-button--active' : 'tab-button'}
+          onClick={() => onModeChange('agent')}
+        >
+          代理
+        </button>
         <button
           className={mode === 'suggestions' ? 'tab-button tab-button--active' : 'tab-button'}
           onClick={() => onModeChange('suggestions')}
@@ -177,31 +239,77 @@ export const AgentSidebar = ({
       </div>
 
       <section className="agent-sidebar__content">
-        {(mode === 'suggestions' ? suggestionItems : feed).map((item) => (
-          <FeedCard key={item.itemId} item={item} onStartTask={onStartTask} onApplyProposal={onApplyProposal} />
-        ))}
+        {mode === 'agent' ? (
+          <div className="agent-overview">
+            <article className="agent-summary-card">
+              <div className="agent-summary-card__meta">
+                <span className="eyebrow">当前主代理</span>
+                <div className={`risk-pill risk-pill--${header.riskLevel}`}>{severityLabel[header.riskLevel]}</div>
+              </div>
+              <h3>{header.currentAgent}</h3>
+              <p>{header.activeSubAgent ? `活跃子代理：${header.activeSubAgent}` : `当前工作面：${surfaceLabel[header.surface]}`}</p>
+              <div className="agent-summary-card__chips">
+                {header.memorySources.map((source) => (
+                  <span key={source} className="memory-chip">
+                    {source}
+                  </span>
+                ))}
+              </div>
+            </article>
+
+            <div className="agent-sidebar__section-heading">
+              <span className="eyebrow">后台任务</span>
+            </div>
+            {visibleTasks.length > 0 ? (
+              visibleTasks.map((task) => (
+                <div key={task.taskId} className="task-row">
+                  <div>
+                    <strong>{task.title}</strong>
+                    <p>{task.summary}</p>
+                  </div>
+                  <span className={`task-status task-status--${task.status}`}>{statusLabel[task.status]}</span>
+                </div>
+              ))
+            ) : (
+              <div className="agent-empty-state">
+                <strong>当前没有挂起中的后台任务</strong>
+                <p>代理会在这里回报新的设定抽取、修订检查和发布预检进度。</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          (mode === 'suggestions' ? suggestionItems : dialogueItems).map((item) => (
+            <FeedCard
+              key={item.itemId}
+              item={item}
+              onStartTask={onStartTask}
+              onApplyProposal={onApplyProposal}
+              onRejectProposal={onRejectProposal}
+              onApplyPublishSynopsisDraft={onApplyPublishSynopsisDraft}
+              onApplyPublishNotesDraft={onApplyPublishNotesDraft}
+              onOpenPublishConfirm={onOpenPublishConfirm}
+            />
+          ))
+        )}
       </section>
 
       {mode === 'suggestions' ? (
         <section className="agent-sidebar__footer">
           <div className="agent-sidebar__section-heading">
-            <span className="eyebrow">建议动作</span>
+            <span className="eyebrow">快捷动作</span>
           </div>
           <div className="quick-actions">
-            {quickActions.map((action) => (
+            {visibleQuickActions.map((action) => (
               <button key={action.id} className="quick-action" onClick={() => onStartTask(action.prompt)}>
                 /{action.label}
               </button>
             ))}
           </div>
-          <button className="ghost-button" onClick={() => onModeChange('dialogue')}>
-            切到对话继续追问
-          </button>
         </section>
-      ) : (
+      ) : mode === 'dialogue' ? (
         <section className="agent-sidebar__composer">
           <div className="quick-actions quick-actions--dialogue">
-            {quickActions.map((action) => (
+            {visibleQuickActions.map((action) => (
               <button key={action.id} className="quick-action" onClick={() => onStartTask(action.prompt)}>
                 /{action.label}
               </button>
@@ -216,7 +324,7 @@ export const AgentSidebar = ({
             提交给当前代理
           </button>
         </section>
-      )}
+      ) : null}
     </aside>
   )
 }

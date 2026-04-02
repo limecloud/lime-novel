@@ -28,19 +28,21 @@ const createMainWindow = (): BrowserWindow => {
     icon: appIconPath,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false
     }
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void window.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    void window.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
   return window
+}
+
+const loadMainWindow = async (window: BrowserWindow): Promise<void> => {
+  if (process.env.ELECTRON_RENDERER_URL) {
+    await window.loadURL(process.env.ELECTRON_RENDERER_URL)
+  } else {
+    await window.loadFile(join(__dirname, '../renderer/index.html'))
+  }
 }
 
 const bootstrap = async (): Promise<void> => {
@@ -55,9 +57,10 @@ const bootstrap = async (): Promise<void> => {
     }
   }
 
-  const services = createDesktopServices()
+  const services = await createDesktopServices()
   mainWindow = createMainWindow()
   unsubscribeRuntime = registerDesktopIpc(mainWindow, services)
+  await loadMainWindow(mainWindow)
 
   mainWindow.on('closed', () => {
     mainWindow = null
