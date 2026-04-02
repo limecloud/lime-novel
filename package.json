@@ -13,7 +13,9 @@
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && electron-vite build"
+    "build": "npm run typecheck && electron-vite build",
+    "verify:local": "npm run build",
+    "verify:gui-smoke": "node scripts/gui-smoke.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.3",
@@ -34,4 +36,3 @@
     "vite": "^7.3.1"
   }
 }
-
