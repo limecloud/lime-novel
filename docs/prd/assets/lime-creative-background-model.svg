@@ -1,0 +1,121 @@
+<svg width="1600" height="980" viewBox="0 0 1600 980" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="980" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6F0E5"/>
+      <stop offset="1" stop-color="#ECE2D2"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 34px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .sub { font: 500 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #5F584E; }
+    .cardTitle { font: 700 24px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .cardBody { font: 500 14px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #5F584E; }
+    .noteTitle { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .note { font: 500 14px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+  </style>
+
+  <rect width="1600" height="980" rx="28" fill="url(#bg)"/>
+  <rect x="24" y="24" width="1552" height="932" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+
+  <text x="64" y="86" class="title">Lime Novel 创作价值链</text>
+  <text x="64" y="120" class="sub">从素材到作品影响，不是信息堆积，而是逐层沉淀、诊断、判断与交付。</text>
+
+  <g>
+    <rect x="64" y="176" width="220" height="520" rx="24" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <rect x="64" y="176" width="220" height="88" rx="24" fill="#EDE6D8"/>
+    <text x="142" y="230" class="cardTitle">素材</text>
+    <text x="88" y="310" class="cardBody">灵感碎片</text>
+    <text x="88" y="346" class="cardBody">句子草稿</text>
+    <text x="88" y="382" class="cardBody">参考资料</text>
+    <text x="88" y="418" class="cardBody">人物片段</text>
+    <text x="88" y="454" class="cardBody">世界观草稿</text>
+    <text x="88" y="528" class="cardBody">这是小说写作最原始、</text>
+    <text x="88" y="556" class="cardBody">最零散、最不稳定的一层。</text>
+  </g>
+
+  <g>
+    <rect x="314" y="176" width="220" height="520" rx="24" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <rect x="314" y="176" width="220" height="88" rx="24" fill="#DCE8DF"/>
+    <text x="392" y="230" class="cardTitle">信息</text>
+    <text x="338" y="310" class="cardBody">章节摘要</text>
+    <text x="338" y="346" class="cardBody">场景卡</text>
+    <text x="338" y="382" class="cardBody">人物事实</text>
+    <text x="338" y="418" class="cardBody">线索记录</text>
+    <text x="338" y="454" class="cardBody">章节目标</text>
+    <text x="338" y="528" class="cardBody">素材被整理后，</text>
+    <text x="338" y="556" class="cardBody">才开始进入可推进状态。</text>
+  </g>
+
+  <g>
+    <rect x="564" y="176" width="220" height="520" rx="24" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <rect x="564" y="176" width="220" height="88" rx="24" fill="#E7EDF0"/>
+    <text x="642" y="230" class="cardTitle">知识</text>
+    <text x="588" y="310" class="cardBody">角色卡</text>
+    <text x="588" y="346" class="cardBody">地点卡</text>
+    <text x="588" y="382" class="cardBody">规则卡</text>
+    <text x="588" y="418" class="cardBody">时间线</text>
+    <text x="588" y="454" class="cardBody">关系网</text>
+    <text x="588" y="528" class="cardBody">知识层是项目长期记忆，</text>
+    <text x="588" y="556" class="cardBody">决定角色和世界能不能写稳。</text>
+  </g>
+
+  <g>
+    <rect x="814" y="176" width="220" height="520" rx="24" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <rect x="814" y="176" width="220" height="88" rx="24" fill="#F4E6E1"/>
+    <text x="892" y="230" class="cardTitle">洞察</text>
+    <text x="838" y="310" class="cardBody">连续性冲突</text>
+    <text x="838" y="346" class="cardBody">节奏问题</text>
+    <text x="838" y="382" class="cardBody">人物失真</text>
+    <text x="838" y="418" class="cardBody">伏笔断裂</text>
+    <text x="838" y="454" class="cardBody">视角漂移</text>
+    <text x="838" y="528" class="cardBody">洞察不是新文本，</text>
+    <text x="838" y="556" class="cardBody">而是识别出真正值得处理的问题。</text>
+  </g>
+
+  <g>
+    <rect x="1064" y="176" width="220" height="520" rx="24" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <rect x="1064" y="176" width="220" height="88" rx="24" fill="#EFE5D4"/>
+    <text x="1142" y="230" class="cardTitle">判断</text>
+    <text x="1088" y="310" class="cardBody">修订优先级</text>
+    <text x="1088" y="346" class="cardBody">改写策略</text>
+    <text x="1088" y="382" class="cardBody">推进顺序</text>
+    <text x="1088" y="418" class="cardBody">删减取舍</text>
+    <text x="1088" y="454" class="cardBody">发布版本选择</text>
+    <text x="1088" y="528" class="cardBody">真正有价值的 AI 不只是生成，</text>
+    <text x="1088" y="556" class="cardBody">而是帮助作者做更好的取舍。</text>
+  </g>
+
+  <g>
+    <rect x="1314" y="176" width="220" height="520" rx="24" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <rect x="1314" y="176" width="220" height="88" rx="24" fill="#DCE8DF"/>
+    <text x="1392" y="230" class="cardTitle">影响</text>
+    <text x="1338" y="310" class="cardBody">成稿</text>
+    <text x="1338" y="346" class="cardBody">导出版本</text>
+    <text x="1338" y="382" class="cardBody">连载反馈</text>
+    <text x="1338" y="418" class="cardBody">读者反应</text>
+    <text x="1338" y="454" class="cardBody">下一轮创作输入</text>
+    <text x="1338" y="528" class="cardBody">作品不是终点，</text>
+    <text x="1338" y="556" class="cardBody">反馈会继续回流成下一轮素材。</text>
+  </g>
+
+  <g stroke="#486A57" stroke-width="4" stroke-linecap="round">
+    <path d="M284 438H314"/>
+    <path d="M534 438H564"/>
+    <path d="M784 438H814"/>
+    <path d="M1034 438H1064"/>
+    <path d="M1284 438H1314"/>
+  </g>
+  <g fill="#486A57">
+    <path d="M307 430L314 438L307 446"/>
+    <path d="M557 430L564 438L557 446"/>
+    <path d="M807 430L814 438L807 446"/>
+    <path d="M1057 430L1064 438L1057 446"/>
+    <path d="M1307 430L1314 438L1307 446"/>
+  </g>
+
+  <rect x="64" y="736" width="1470" height="172" rx="24" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="92" y="782" class="noteTitle">对 Lime Novel 的直接含义</text>
+  <text x="92" y="824" class="note">1. 产品不能只做“生成文本”，必须把结果持续沉淀为角色、规则、时间线和修订记录。</text>
+  <text x="92" y="858" class="note">2. 代理系统的任务不是替作者做决定，而是把证据、风险和可应用提议组织得足够清楚。</text>
+  <text x="92" y="892" class="note">3. 发布与读者反馈不是尾部附属功能，而是影响层，会继续回流为下一轮创作输入。</text>
+</svg>

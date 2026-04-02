@@ -1,0 +1,37 @@
+{
+  "name": "lime-novel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lime Novel desktop workspace",
+  "main": "./out/main/index.js",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && electron-vite build"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.90.3",
+    "@tiptap/extension-placeholder": "^2.26.1",
+    "@tiptap/react": "^2.26.1",
+    "@tiptap/starter-kit": "^2.26.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.6",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.0.4",
+    "electron": "^39.8.5",
+    "electron-vite": "^4.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  }
+}
+

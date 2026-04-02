@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "projectId": "proj-lime-novel",
+  "title": "钟塔尽头的雨季",
+  "subtitle": "代理优先的长篇小说工作台",
+  "status": "drafting",
+  "language": "zh-CN",
+  "genre": "悬疑 / 都市奇幻",
+  "premise": "女主在父亲失踪后的旧钟楼里，逐步揭开一条被整座城市默许的时间裂缝。",
+  "currentSurface": "writing",
+  "currentChapterId": "chapter-12",
+  "volumes": [
+    {
+      "volumeId": "volume-rain-echo",
+      "order": 1,
+      "title": "第一卷：雨季回声",
+      "summary": "围绕钟楼钥匙、父亲失踪和时间裂缝逐步收束主线。"
+    }
+  ],
+  "chapters": [
+    {
+      "chapterId": "chapter-11",
+      "file": "manuscript/chapters/011-old-platform-echo.md",
+      "volumeId": "volume-rain-echo",
+      "order": 11,
+      "title": "旧站台的回声",
+      "summary": "林清远第一次确认失踪案和钟楼钥匙有关。",
+      "status": "revised",
+      "wordCount": 2890,
+      "objective": "让钥匙和旧站台形成稳定联系，为钟楼入口做前置情绪准备。",
+      "lastEditedAt": "2026-04-02 19:08",
+      "scenes": [
+        {
+          "sceneId": "scene-11-1",
+          "order": 1,
+          "title": "停运站台",
+          "goal": "把失踪案线索从“传闻”推进到可验证事实。",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "chapterId": "chapter-12",
+      "file": "manuscript/chapters/012-before-the-lock-turns.md",
+      "volumeId": "volume-rain-echo",
+      "order": 12,
+      "title": "钥匙进锁之前",
+      "summary": "她终于站到门前，却发现自己真正害怕的不是门后，而是门开之后必须承认的事实。",
+      "status": "draft",
+      "wordCount": 196,
+      "objective": "让林清远在进入钟楼前完成一次主动选择，而不是被剧情推着走。",
+      "lastEditedAt": "2026-04-02 02:42",
+      "scenes": [
+        {
+          "sceneId": "scene-12-1",
+          "order": 1,
+          "title": "楼梯口的迟疑",
+          "goal": "把心理犹疑写够，让进入钟楼成为主动选择。",
+          "status": "drafting"
+        },
+        {
+          "sceneId": "scene-12-2",
+          "order": 2,
+          "title": "门锁前的潮气",
+          "goal": "让钥匙、门锁和旧铜味形成感官钩子。",
+          "status": "planned"
+        },
+        {
+          "sceneId": "scene-12-3",
+          "order": 3,
+          "title": "第一声异响",
+          "goal": "把悬念推进到必须进入下一章。",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "chapterId": "chapter-13",
+      "file": "manuscript/chapters/013-rain-curtain-void-floor.md",
+      "volumeId": "volume-rain-echo",
+      "order": 13,
+      "title": "雨幕下的空层",
+      "summary": "反派的视角第一次靠近核心秘密，但不能提前泄露信息。",
+      "status": "idea",
+      "wordCount": 0,
+      "objective": "在不破坏悬念的情况下，让反派的压力逼近主线核心。",
+      "lastEditedAt": "2026-04-02 18:44",
+      "scenes": []
+    }
+  ],
+  "homeHighlights": [
+    {
+      "title": "恢复写作",
+      "detail": "从第 12 章继续，当前最好先补强进门前的心理犹疑。"
+    },
+    {
+      "title": "最近后台结果",
+      "detail": "设定代理提取了 1 张候选卡，修订代理发现 2 个需要处理的问题。"
+    },
+    {
+      "title": "项目健康度",
+      "detail": "主线稳定，问题集中在第 12 - 13 章的视角边界和节奏抬升。"
+    }
+  ],
+  "quickActions": [
+    {
+      "id": "quick-continue",
+      "label": "推进下一段",
+      "prompt": "请基于当前章节目标，给我一版更克制但更有悬念推进力的下一段。"
+    },
+    {
+      "id": "quick-canon",
+      "label": "沉淀设定卡",
+      "prompt": "把当前章新增的角色、物件和规则提炼成候选卡，并标出证据。"
+    },
+    {
+      "id": "quick-revision",
+      "label": "检查视角",
+      "prompt": "检查本章是否出现视角越界，并给出证据与修订建议。"
+    }
+  ]
+}

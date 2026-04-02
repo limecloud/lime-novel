@@ -1,0 +1,121 @@
+<svg width="1600" height="960" viewBox="0 0 1600 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgHome" x1="0" y1="0" x2="1600" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EFE4"/>
+      <stop offset="1" stop-color="#E9E0D2"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 24px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h1 { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h2 { font: 700 15px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .body { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #7A7368; }
+  </style>
+
+  <rect width="1600" height="960" rx="28" fill="url(#bgHome)"/>
+  <rect x="24" y="24" width="1552" height="912" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+  <rect x="24" y="24" width="1552" height="56" rx="24" fill="#F7F2E8"/>
+  <text x="56" y="59" class="title">Lime Novel / 项目首页</text>
+  <text x="1032" y="59" class="body">独立小说产品首页，右栏默认展示“建议”视图，帮助作者 10 秒内回到作品</text>
+
+  <rect x="44" y="100" width="72" height="816" rx="20" fill="#F2EBDD" stroke="#DDD3C3"/>
+  <rect x="56" y="124" width="48" height="48" rx="14" fill="#486A57"/>
+  <text x="72" y="154" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#F7F4EE">首</text>
+  <rect x="56" y="188" width="48" height="48" rx="14" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="72" y="218" class="small">写</text>
+  <rect x="56" y="252" width="48" height="48" rx="14" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="72" y="282" class="small">设</text>
+  <rect x="56" y="316" width="48" height="48" rx="14" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="72" y="346" class="small">修</text>
+  <rect x="56" y="380" width="48" height="48" rx="14" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="72" y="410" class="small">发</text>
+
+  <rect x="132" y="100" width="272" height="816" rx="22" fill="#F3ECE0" stroke="#DDD3C3"/>
+  <text x="160" y="140" class="h1">作品导航</text>
+  <rect x="160" y="164" width="216" height="44" rx="14" fill="#486A57"/>
+  <text x="216" y="192" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#F7F4EE">+ 新建小说项目</text>
+
+  <text x="160" y="252" class="h2">最近继续</text>
+  <rect x="160" y="268" width="216" height="72" rx="18" fill="#DCE8DF" stroke="#B7CCBC"/>
+  <text x="180" y="298" class="body">《雾港回声》第二卷</text>
+  <text x="180" y="322" class="small">上次停在第 12 章 · 4 小时前</text>
+
+  <text x="160" y="386" class="h2">系列</text>
+  <rect x="160" y="402" width="216" height="68" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="180" y="432" class="body">雾港宇宙</text>
+  <text x="180" y="456" class="small">3 本书 / 2 本在写 / 角色共享</text>
+
+  <text x="160" y="518" class="h2">待处理结果</text>
+  <rect x="160" y="534" width="216" height="150" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="180" y="566" class="small">设定代理：新增 2 张候选卡</text>
+  <text x="180" y="594" class="small">修订代理：发现 3 个问题</text>
+  <text x="180" y="622" class="small">发布代理：导出预检已通过</text>
+
+  <rect x="428" y="100" width="736" height="816" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="460" y="140" class="h1">回到你的作品</text>
+
+  <rect x="460" y="168" width="672" height="172" rx="22" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="492" y="214" class="title" style="font-size:28px;">《雾港回声》第二卷《雾中的证词》</text>
+  <text x="492" y="248" class="body">当前目标：完成第 12 章，推进钟楼钥匙线索，并准备本卷中段回收。</text>
+  <text x="492" y="280" class="small">总字数 183,000 / 当前卷 62,400 / 修订问题 3 / 候选设定卡 2</text>
+  <rect x="492" y="300" width="164" height="12" rx="6" fill="#E6DED0"/>
+  <rect x="492" y="300" width="108" height="12" rx="6" fill="#486A57"/>
+
+  <rect x="460" y="372" width="320" height="226" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="486" y="414" class="h2">当前主项目</text>
+  <text x="486" y="446" class="body">第 12 章《潮汐下的门铃》</text>
+  <text x="486" y="474" class="small">场景 2：钟楼对峙</text>
+  <text x="486" y="502" class="small">上次停在：门铃第一次响起后</text>
+  <rect x="486" y="534" width="120" height="36" rx="16" fill="#486A57"/>
+  <text x="524" y="557" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#F7F4EE">继续写作</text>
+
+  <rect x="812" y="372" width="320" height="226" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="838" y="414" class="h2">最近产物</text>
+  <text x="838" y="446" class="small">角色卡：林雾状态已同步</text>
+  <text x="838" y="474" class="small">问题卡：钟声反应偏冷静</text>
+  <text x="838" y="502" class="small">导出包：上次全稿版本已快照</text>
+
+  <rect x="460" y="630" width="672" height="246" rx="20" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="486" y="672" class="h2">设计判断</text>
+  <text x="486" y="708" class="body">首页不是主 App 那种“去哪里开始用系统”，而是“现在回到哪部作品”。</text>
+  <text x="486" y="740" class="body">优先级应固定为：继续写作 &gt; 恢复现场 &gt; 查看结果 &gt; 新建项目。</text>
+
+  <rect x="1192" y="100" width="364" height="816" rx="22" fill="#F7F2E8" stroke="#DDD3C3"/>
+  <text x="1220" y="140" class="h1">项目总控代理</text>
+  <rect x="1220" y="162" width="84" height="30" rx="15" fill="#486A57"/>
+  <text x="1248" y="182" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">建议</text>
+  <rect x="1314" y="162" width="84" height="30" rx="15" fill="#DCE8DF"/>
+  <text x="1342" y="182" class="small">对话</text>
+
+  <rect x="1220" y="216" width="308" height="100" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="250" class="h2">恢复摘要</text>
+  <text x="1240" y="278" class="small">我已恢复上次写作现场：第 12 章 / 场景 2</text>
+  <text x="1240" y="302" class="small">最近命中角色卡 3 张，最新快照已挂回项目。</text>
+
+  <rect x="1248" y="338" width="280" height="94" rx="18" fill="#EAF1EC" stroke="#B7CCBC"/>
+  <text x="1268" y="370" class="small">建议先继续写作，再处理修订代理发现的</text>
+  <text x="1268" y="394" class="small">3 个问题，这样最不打断当前心流。</text>
+
+  <rect x="1220" y="452" width="308" height="152" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="488" class="h2">后台结果</text>
+  <text x="1240" y="516" class="small">设定代理：候选卡“钟楼钥匙”已准备</text>
+  <text x="1240" y="542" class="small">修订代理：第 12 章有 1 条高优先问题</text>
+  <text x="1240" y="568" class="small">发布代理：最新快照可导出</text>
+
+  <rect x="1220" y="628" width="308" height="138" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="664" class="h2">建议动作</text>
+  <text x="1240" y="692" class="small">/继续第12章</text>
+  <text x="1330" y="692" class="small">/打开候选设定卡</text>
+  <text x="1240" y="718" class="small">/查看高优先修订问题</text>
+  <text x="1240" y="744" class="small">/比较本卷最近三次快照</text>
+
+  <rect x="1220" y="782" width="308" height="58" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="808" class="small">想继续追问“为什么先写而不是先修订”时，</text>
+  <text x="1240" y="830" class="small">切到对话即可。</text>
+
+  <rect x="1220" y="852" width="220" height="40" rx="18" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="1246" y="877" class="body">切到对话继续追问</text>
+  <rect x="1450" y="852" width="78" height="40" rx="18" fill="#486A57"/>
+  <text x="1471" y="877" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">打开对话</text>
+</svg>

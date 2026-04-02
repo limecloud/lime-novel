@@ -1,0 +1,122 @@
+<svg width="1600" height="960" viewBox="0 0 1600 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgBible" x1="0" y1="0" x2="1600" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4EEE4"/>
+      <stop offset="1" stop-color="#E8E0D5"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 24px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h1 { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h2 { font: 700 15px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .body { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #7A7368; }
+  </style>
+
+  <rect width="1600" height="960" rx="28" fill="url(#bgBible)"/>
+  <rect x="24" y="24" width="1552" height="912" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+  <rect x="24" y="24" width="1552" height="56" rx="24" fill="#F7F2E8"/>
+  <text x="56" y="59" class="title">Lime Novel / 设定工作面</text>
+  <text x="1030" y="59" class="body">不是后台管理页，而是小说项目长期记忆的前台，右栏默认展示“建议”视图</text>
+
+  <rect x="44" y="100" width="72" height="816" rx="20" fill="#F2EBDD" stroke="#DDD3C3"/>
+  <rect x="56" y="252" width="48" height="48" rx="14" fill="#486A57"/>
+  <text x="72" y="282" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#F7F4EE">设</text>
+
+  <rect x="132" y="100" width="272" height="816" rx="22" fill="#F3ECE0" stroke="#DDD3C3"/>
+  <text x="160" y="140" class="h1">设定分类</text>
+  <rect x="160" y="164" width="216" height="40" rx="14" fill="#486A57"/>
+  <text x="222" y="190" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#F7F4EE">+ 新建卡片</text>
+  <rect x="160" y="236" width="216" height="56" rx="16" fill="#DCE8DF" stroke="#B7CCBC"/>
+  <text x="182" y="268" class="body">人物卡</text>
+  <text x="330" y="268" class="small">24</text>
+  <rect x="160" y="304" width="216" height="56" rx="16" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="182" y="336" class="body">地点与场景</text>
+  <text x="330" y="336" class="small">13</text>
+  <rect x="160" y="372" width="216" height="56" rx="16" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="182" y="404" class="body">规则与道具</text>
+  <text x="330" y="404" class="small">18</text>
+  <rect x="160" y="440" width="216" height="56" rx="16" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="182" y="472" class="body">时间线节点</text>
+  <text x="330" y="472" class="small">32</text>
+
+  <rect x="428" y="100" width="736" height="816" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="460" y="140" class="h1">角色与关系</text>
+  <rect x="460" y="168" width="676" height="48" rx="16" fill="#F7F2E8"/>
+  <text x="488" y="198" class="body">列表</text>
+  <text x="560" y="198" class="body">关系图</text>
+  <text x="654" y="198" class="body">时间线</text>
+  <text x="968" y="198" class="small">支持从正文反向抽卡与同步</text>
+
+  <rect x="460" y="244" width="210" height="170" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="484" y="280" class="h2">林雾</text>
+  <text x="484" y="308" class="body">调查记者 / 主角</text>
+  <text x="484" y="336" class="small">弱点：惧怕钟声与高处</text>
+  <text x="484" y="362" class="small">最近引用：第 12 章</text>
+
+  <rect x="690" y="244" width="210" height="170" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="714" y="280" class="h2">沈策</text>
+  <text x="714" y="308" class="body">港务局前职员</text>
+  <text x="714" y="336" class="small">状态：信任波动</text>
+  <text x="714" y="362" class="small">最近引用：第 12 章</text>
+
+  <rect x="920" y="244" width="216" height="170" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="944" y="280" class="h2">钟楼钥匙</text>
+  <text x="944" y="308" class="body">二卷核心道具</text>
+  <text x="944" y="336" class="small">首次出现：第 3 章</text>
+  <text x="944" y="362" class="small">关联：林雾 / 沈策</text>
+
+  <rect x="460" y="446" width="676" height="220" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="486" y="482" class="h2">关系与时间线示意</text>
+  <circle cx="580" cy="566" r="34" fill="#DCE8DF"/>
+  <circle cx="782" cy="548" r="34" fill="#EFE5D3"/>
+  <circle cx="1000" cy="586" r="34" fill="#E7EDF0"/>
+  <text x="560" y="572" class="small">林雾</text>
+  <text x="762" y="554" class="small">沈策</text>
+  <text x="968" y="592" class="small">钥匙</text>
+  <path d="M614 560C662 548 710 544 748 548" stroke="#68839A" stroke-width="3" stroke-linecap="round"/>
+  <path d="M816 556C870 564 920 572 966 582" stroke="#C1843F" stroke-width="3" stroke-linecap="round"/>
+
+  <rect x="460" y="700" width="676" height="176" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="486" y="736" class="h2">设计判断</text>
+  <text x="486" y="768" class="body">设定工作面不是主 App 那种通用卡片画布，而是为小说长期一致性服务的专用工作面。</text>
+  <text x="486" y="798" class="body">核心是“角色、规则、时间线、章节引用”四种结构，而不是随意放很多小部件。</text>
+
+  <rect x="1192" y="100" width="364" height="816" rx="22" fill="#F7F2E8" stroke="#DDD3C3"/>
+  <text x="1220" y="140" class="h1">设定代理</text>
+  <rect x="1220" y="162" width="84" height="30" rx="15" fill="#486A57"/>
+  <text x="1248" y="182" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">建议</text>
+  <rect x="1314" y="162" width="84" height="30" rx="15" fill="#DCE8DF"/>
+  <text x="1342" y="182" class="small">对话</text>
+
+  <rect x="1220" y="216" width="308" height="108" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="250" class="h2">同步摘要</text>
+  <text x="1240" y="278" class="small">我从第 12 章提取到 2 个设定变化：</text>
+  <text x="1240" y="302" class="small">林雾情绪阈值变化、钟楼钥匙即将显化。</text>
+
+  <rect x="1248" y="348" width="280" height="94" rx="18" fill="#EAF1EC" stroke="#B7CCBC"/>
+  <text x="1268" y="380" class="small">建议把“钟楼钥匙”升级为高频可见设定，</text>
+  <text x="1268" y="404" class="small">避免后续章节再次丢失主线。</text>
+
+  <rect x="1220" y="466" width="308" height="186" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="502" class="h2">证据与影响</text>
+  <text x="1240" y="530" class="small">命中章节：第 3 / 8 / 12 章</text>
+  <text x="1240" y="556" class="small">当前冲突：林雾在钟声场景下反应偏弱</text>
+  <text x="1240" y="582" class="small">可写回：人物卡、道具卡、时间线</text>
+  <text x="1240" y="608" class="small">影响范围：第二卷主线道具可见性</text>
+
+  <rect x="1220" y="678" width="308" height="118" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="714" class="h2">建议动作</text>
+  <text x="1240" y="742" class="small">/写入候选卡</text>
+  <text x="1330" y="742" class="small">/升级为高频可见</text>
+  <text x="1240" y="768" class="small">/标记为连续性风险</text>
+
+  <rect x="1220" y="806" width="308" height="54" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="832" class="small">想追问“抽卡边界”“引用范围”时，</text>
+  <text x="1240" y="852" class="small">可切到对话展开问答。</text>
+
+  <rect x="1220" y="868" width="220" height="40" rx="18" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="1246" y="893" class="body">切到对话继续追问</text>
+  <rect x="1450" y="868" width="78" height="40" rx="18" fill="#486A57"/>
+  <text x="1471" y="893" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">打开对话</text>
+</svg>

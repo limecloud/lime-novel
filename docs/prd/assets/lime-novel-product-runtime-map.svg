@@ -1,0 +1,124 @@
+<svg width="1600" height="980" viewBox="0 0 1600 980" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgMap" x1="0" y1="0" x2="1600" y2="980" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6F0E5"/>
+      <stop offset="1" stop-color="#ECE2D2"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 30px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .sub { font: 500 17px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #625A50; }
+    .section { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .boxTitle { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .boxBody { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #746C60; }
+  </style>
+
+  <rect width="1600" height="980" rx="28" fill="url(#bgMap)"/>
+  <rect x="24" y="24" width="1552" height="932" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+
+  <text x="64" y="84" class="title">Lime Novel 产品前台与代理系统关系图</text>
+  <text x="64" y="118" class="sub">前台只暴露作品对象，真正负责编排的是代理系统、技能目录、记忆层与工具连接层。</text>
+
+  <text x="64" y="180" class="section">一、前台工作面</text>
+  <g>
+    <rect x="64" y="206" width="260" height="104" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="144" y="248" class="boxTitle">首页工作面</text>
+    <text x="94" y="278" class="small">恢复现场 / 最近项目 / 系列入口</text>
+  </g>
+  <g>
+    <rect x="360" y="206" width="260" height="104" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="440" y="248" class="boxTitle">写作工作面</text>
+    <text x="392" y="278" class="small">章节正文 / 选区动作 / 行内提议</text>
+  </g>
+  <g>
+    <rect x="656" y="206" width="260" height="104" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="736" y="248" class="boxTitle">设定工作面</text>
+    <text x="694" y="278" class="small">卡片 / 关系 / 时间线 / 引用章节</text>
+  </g>
+  <g>
+    <rect x="952" y="206" width="260" height="104" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="1032" y="248" class="boxTitle">修订工作面</text>
+    <text x="982" y="278" class="small">问题队列 / 差异 / 多方案修订</text>
+  </g>
+  <g>
+    <rect x="1248" y="206" width="260" height="104" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="1328" y="248" class="boxTitle">发布工作面</text>
+    <text x="1284" y="278" class="small">导出预览 / 平台资产 / 元数据</text>
+  </g>
+
+  <text x="64" y="390" class="section">二、代理编排层</text>
+  <g>
+    <rect x="64" y="416" width="260" height="120" rx="20" fill="#DCE8DF" stroke="#B7CCBC"/>
+    <text x="130" y="458" class="boxTitle">项目总控代理</text>
+    <text x="96" y="490" class="boxBody">恢复现场、挂载技能、汇总后台结果、管理项目状态。</text>
+  </g>
+  <g>
+    <rect x="360" y="416" width="260" height="120" rx="20" fill="#E7EDF0" stroke="#C8D3D7"/>
+    <text x="434" y="458" class="boxTitle">章节代理</text>
+    <text x="392" y="490" class="boxBody">续写、改写、过渡补写、行内提议、章节推进。</text>
+  </g>
+  <g>
+    <rect x="656" y="416" width="260" height="120" rx="20" fill="#E7EDF0" stroke="#C8D3D7"/>
+    <text x="730" y="458" class="boxTitle">设定代理</text>
+    <text x="688" y="490" class="boxBody">抽卡、同步、冲突检测、角色状态与时间线维护。</text>
+  </g>
+  <g>
+    <rect x="952" y="416" width="260" height="120" rx="20" fill="#F4E6E1" stroke="#E0BDB1"/>
+    <text x="1026" y="458" class="boxTitle">修订代理</text>
+    <text x="984" y="490" class="boxBody">问题生成、证据回溯、多方案修订、撤销记录。</text>
+  </g>
+  <g>
+    <rect x="1248" y="416" width="260" height="120" rx="20" fill="#EFE5D4" stroke="#D7C8AD"/>
+    <text x="1322" y="458" class="boxTitle">发布代理</text>
+    <text x="1280" y="490" class="boxBody">导出预设、平台打包、元数据校验、反馈回流。</text>
+  </g>
+
+  <text x="64" y="618" class="section">三、中层能力</text>
+  <g>
+    <rect x="64" y="644" width="356" height="138" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="94" y="688" class="boxTitle">技能目录</text>
+    <text x="94" y="720" class="boxBody">项目技能 / 章节技能 / 设定技能 / 修订技能 / 发布技能</text>
+    <text x="94" y="748" class="small">技能是动作包，不是前台导航。</text>
+  </g>
+  <g>
+    <rect x="446" y="644" width="356" height="138" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="476" y="688" class="boxTitle">任务与转录</text>
+    <text x="476" y="720" class="boxBody">后台子代理、任务状态、结果转录、可回溯的执行记录。</text>
+    <text x="476" y="748" class="small">让作者看得见代理到底做了什么。</text>
+  </g>
+  <g>
+    <rect x="828" y="644" width="356" height="138" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="858" y="688" class="boxTitle">记忆与证据</text>
+    <text x="858" y="720" class="boxBody">工作记忆 / 章节记忆 / 项目记忆 / 证据片段 / 问题队列</text>
+    <text x="858" y="748" class="small">长篇小说不靠长对话硬撑。</text>
+  </g>
+  <g>
+    <rect x="1210" y="644" width="298" height="138" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="1240" y="688" class="boxTitle">审批与守护</text>
+    <text x="1240" y="720" class="boxBody">覆写确认 / 批量更新确认 / 发布确认 / 风险提示</text>
+    <text x="1240" y="748" class="small">高风险动作必须可见、可停、可撤销。</text>
+  </g>
+
+  <text x="64" y="860" class="section">四、底层执行层</text>
+  <rect x="64" y="886" width="1444" height="46" rx="16" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="96" y="916" class="boxBody">文件读写工具</text>
+  <text x="310" y="916" class="boxBody">差异与导出工具</text>
+  <text x="560" y="916" class="boxBody">搜索能力</text>
+  <text x="740" y="916" class="boxBody">资料与平台连接器</text>
+  <text x="1022" y="916" class="boxBody">本地数据库与索引</text>
+  <text x="1282" y="916" class="boxBody">推理模型与托管服务</text>
+
+  <g stroke="#C9BDA9" stroke-width="2.5" stroke-linecap="round">
+    <path d="M194 310V416"/>
+    <path d="M490 310V416"/>
+    <path d="M786 310V416"/>
+    <path d="M1082 310V416"/>
+    <path d="M1378 310V416"/>
+    <path d="M194 536V644"/>
+    <path d="M490 536V644"/>
+    <path d="M786 536V644"/>
+    <path d="M1082 536V644"/>
+    <path d="M1378 536V644"/>
+  </g>
+</svg>

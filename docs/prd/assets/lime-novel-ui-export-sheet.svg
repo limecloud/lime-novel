@@ -1,0 +1,95 @@
+<svg width="1600" height="960" viewBox="0 0 1600 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgExport" x1="0" y1="0" x2="1600" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4EEE3"/>
+      <stop offset="1" stop-color="#E8DECF"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 24px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h1 { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h2 { font: 700 15px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .body { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #7A7368; }
+  </style>
+
+  <rect width="1600" height="960" rx="28" fill="url(#bgExport)"/>
+  <rect x="24" y="24" width="1552" height="912" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+  <rect x="24" y="24" width="1552" height="56" rx="24" fill="#F7F2E8"/>
+  <text x="56" y="59" class="title">Lime Novel / 发布工作面</text>
+  <text x="1038" y="59" class="body">发布是小说系统的结果工作面，不是一个孤立导出页，右栏默认展示“建议”视图</text>
+
+  <rect x="44" y="100" width="72" height="816" rx="20" fill="#F2EBDD" stroke="#DDD3C3"/>
+  <rect x="56" y="380" width="48" height="48" rx="14" fill="#486A57"/>
+  <text x="72" y="410" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#F7F4EE">发</text>
+
+  <rect x="132" y="100" width="272" height="816" rx="22" fill="#F3ECE0" stroke="#DDD3C3"/>
+  <text x="160" y="140" class="h1">发布结构</text>
+  <rect x="160" y="170" width="216" height="68" rx="18" fill="#DCE8DF" stroke="#B7CCBC"/>
+  <text x="180" y="200" class="body">长篇排版稿</text>
+  <text x="180" y="224" class="small">适合完整存档与正式交付</text>
+  <rect x="160" y="252" width="216" height="68" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="180" y="282" class="body">连载发布稿</text>
+  <text x="180" y="306" class="small">适合平台章节拆分与简介生成</text>
+
+  <rect x="160" y="362" width="216" height="176" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="180" y="398" class="h2">本次范围</text>
+  <text x="180" y="428" class="small">第二卷</text>
+  <text x="180" y="454" class="small">第 10 章 - 第 12 章</text>
+  <text x="180" y="480" class="small">版本：2026-04-02 晚间稿</text>
+
+  <rect x="428" y="100" width="736" height="816" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="460" y="140" class="h1">导出预览</text>
+  <rect x="460" y="168" width="676" height="64" rx="16" fill="#F7F2E8"/>
+  <text x="488" y="206" class="body">《雾港回声》第二卷《雾中的证词》 · 导出范围：第 10 章 - 第 12 章</text>
+
+  <rect x="460" y="264" width="676" height="432" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="488" y="310" class="title" style="font-size:28px;">导出预览</text>
+  <text x="488" y="352" class="body">第 12 章《潮汐下的门铃》</text>
+  <text x="488" y="384" class="small">这里展示正文排版、目录层级、卷册信息、简介与元数据。</text>
+  <text x="488" y="436" class="small">重点不是“跳去另一个工具页”，而是在项目上下文里完成发布前准备。</text>
+
+  <rect x="460" y="728" width="676" height="148" rx="20" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="488" y="764" class="h2">设计判断</text>
+  <text x="488" y="794" class="body">发布工作面仍然属于小说主流程，因为简介、章节范围、元数据和版本都依赖项目记忆。</text>
+  <text x="488" y="824" class="body">因此这里应该由发布代理接管，而不是只留下一个“导出”按钮。</text>
+
+  <rect x="1192" y="100" width="364" height="816" rx="22" fill="#F7F2E8" stroke="#DDD3C3"/>
+  <text x="1220" y="140" class="h1">发布代理</text>
+  <rect x="1220" y="162" width="84" height="30" rx="15" fill="#486A57"/>
+  <text x="1248" y="182" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">建议</text>
+  <rect x="1314" y="162" width="84" height="30" rx="15" fill="#DCE8DF"/>
+  <text x="1342" y="182" class="small">对话</text>
+
+  <rect x="1220" y="216" width="308" height="108" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="250" class="h2">预检摘要</text>
+  <text x="1240" y="278" class="small">我已检查章节顺序、标题层级、卷册信息</text>
+  <text x="1240" y="302" class="small">与简介字段，当前仅有 1 项待确认。</text>
+
+  <rect x="1248" y="348" width="280" height="94" rx="18" fill="#EAF1EC" stroke="#B7CCBC"/>
+  <text x="1268" y="380" class="small">建议使用“连载发布稿”预设，</text>
+  <text x="1268" y="404" class="small">并自动拆分为 3 个平台章节。</text>
+
+  <rect x="1220" y="460" width="308" height="164" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="496" class="h2">建议动作</text>
+  <text x="1240" y="524" class="small">/应用长篇排版稿</text>
+  <text x="1330" y="524" class="small">/应用连载发布稿</text>
+  <text x="1240" y="550" class="small">/生成平台简介</text>
+  <text x="1330" y="550" class="small">/导出当前版本</text>
+  <text x="1240" y="576" class="small">/比较最近两次发布差异</text>
+
+  <rect x="1220" y="648" width="308" height="128" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="684" class="h2">确认前提示</text>
+  <text x="1240" y="712" class="small">发布会生成新版本快照。</text>
+  <text x="1240" y="738" class="small">若覆盖同名文件，需要再次确认。</text>
+  <text x="1240" y="764" class="small">封面简介长度仍需作者拍板。</text>
+
+  <rect x="1220" y="794" width="308" height="58" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="820" class="small">如需补写简介或比较平台差异，</text>
+  <text x="1240" y="842" class="small">可切到对话继续细聊。</text>
+
+  <rect x="1220" y="852" width="220" height="40" rx="18" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="1246" y="877" class="body">切到对话继续追问</text>
+  <rect x="1450" y="852" width="78" height="40" rx="18" fill="#486A57"/>
+  <text x="1471" y="877" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">打开对话</text>
+</svg>

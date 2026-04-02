@@ -1,0 +1,15 @@
+{
+  "projectId": "proj-lime-novel",
+  "title": "钟塔尽头的雨季",
+  "preset": {
+    "id": "export-md",
+    "title": "长稿 Markdown",
+    "format": "markdown"
+  },
+  "splitChapters": 3,
+  "generatedAt": "2026-04-01T18:42:07.997Z",
+  "files": [
+    "/Users/coso/Documents/dev/ai/limecloud/lime-novel/playground/demo-project/exports/2026-04-01T18-42-07.967Z-export-md/manuscript.md",
+    "/Users/coso/Documents/dev/ai/limecloud/lime-novel/playground/demo-project/exports/2026-04-01T18-42-07.967Z-export-md/synopsis.md"
+  ]
+}

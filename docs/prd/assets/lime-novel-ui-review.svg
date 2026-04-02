@@ -1,0 +1,105 @@
+<svg width="1600" height="960" viewBox="0 0 1600 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgReview" x1="0" y1="0" x2="1600" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3EDE2"/>
+      <stop offset="1" stop-color="#E7DED0"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 24px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h1 { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h2 { font: 700 15px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .body { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #7A7368; }
+    .serif { font: 500 17px "Source Han Serif SC", "Songti SC", serif; fill: #2C2822; }
+  </style>
+
+  <rect width="1600" height="960" rx="28" fill="url(#bgReview)"/>
+  <rect x="24" y="24" width="1552" height="912" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+  <rect x="24" y="24" width="1552" height="56" rx="24" fill="#F7F2E8"/>
+  <text x="56" y="59" class="title">Lime Novel / 修订工作面</text>
+  <text x="1046" y="59" class="body">修订不是抽象建议，而是带证据、影响范围与应用动作的问题处理流，右栏默认展示“建议”视图</text>
+
+  <rect x="44" y="100" width="72" height="816" rx="20" fill="#F2EBDD" stroke="#DDD3C3"/>
+  <rect x="56" y="316" width="48" height="48" rx="14" fill="#486A57"/>
+  <text x="72" y="346" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#F7F4EE">修</text>
+
+  <rect x="132" y="100" width="272" height="816" rx="22" fill="#F3ECE0" stroke="#DDD3C3"/>
+  <text x="160" y="140" class="h1">问题队列</text>
+  <rect x="160" y="170" width="216" height="80" rx="18" fill="#FBE8E3" stroke="#E2B7AA"/>
+  <text x="180" y="202" class="body">高优先 · 人物反应不一致</text>
+  <text x="180" y="226" class="small">第 12 章 · 林雾对钟声过于平静</text>
+  <rect x="160" y="264" width="216" height="72" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="180" y="296" class="body">中优先 · 时间线冲突</text>
+  <text x="180" y="320" class="small">第 8 章与第 12 章天气不一致</text>
+  <rect x="160" y="350" width="216" height="72" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="180" y="382" class="body">中优先 · 节奏拖慢</text>
+  <text x="180" y="406" class="small">钟楼外部描写略长</text>
+
+  <rect x="160" y="470" width="216" height="180" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="180" y="506" class="h2">筛选</text>
+  <text x="180" y="536" class="small">范围：当前章 / 当前卷 / 全书</text>
+  <text x="180" y="562" class="small">类型：人物 / 节奏 / POV / 语言</text>
+  <text x="180" y="588" class="small">来源：自动诊断 / 手动标记 / 反馈导入</text>
+
+  <rect x="428" y="100" width="736" height="816" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <rect x="456" y="124" width="680" height="48" rx="16" fill="#F7F2E8"/>
+  <text x="484" y="154" class="body">问题定位：第 12 章 / 场景 2 / 林雾对钟声反应不一致</text>
+
+  <text x="476" y="236" class="serif">钟楼的门没有锁，里面却传来比铁更轻的脚步声。她抬手碰到门环，</text>
+  <text x="476" y="276" class="serif">指尖一瞬间冰得像按在某个死人留下的名字上。远处有人喊她的名字，</text>
+  <rect x="462" y="296" width="676" height="72" rx="14" fill="#FBE8E3" stroke="#E2B7AA"/>
+  <text x="484" y="326" class="small">问题命中片段：环境描写足够，但缺少角色惯常的身体反应与情绪压抑。</text>
+
+  <text x="476" y="430" class="serif">她听见第二声门铃，脚步却并没有退。相反，她甚至像在核对某种记忆，</text>
+  <text x="476" y="470" class="serif">抬头看向钟楼最黑的那扇窗。这个动作会让角色显得比前文更冷硬。</text>
+
+  <rect x="462" y="536" width="676" height="150" rx="18" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="486" y="572" class="h2">证据</text>
+  <text x="486" y="602" class="small">第 5 章：第一次听见钟声时出现耳鸣与呼吸停滞。</text>
+  <text x="486" y="628" class="small">第 8 章：她在高处会先摸口袋里的旧硬币稳定情绪。</text>
+  <text x="486" y="654" class="small">因此第 12 章至少应补一层身体反应或压抑反应。</text>
+
+  <rect x="462" y="720" width="676" height="148" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="486" y="756" class="h2">设计判断</text>
+  <text x="486" y="786" class="body">修订工作面不是普通聊天分析页，而是“问题列表 + 原文定位 + 差异方案”的专用处理台。</text>
+  <text x="486" y="816" class="body">每个问题都必须能定位、应用、延后、忽略，并保留来源与记录。</text>
+
+  <rect x="1192" y="100" width="364" height="816" rx="22" fill="#F7F2E8" stroke="#DDD3C3"/>
+  <text x="1220" y="140" class="h1">修订代理</text>
+  <rect x="1220" y="162" width="84" height="30" rx="15" fill="#486A57"/>
+  <text x="1248" y="182" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">建议</text>
+  <rect x="1314" y="162" width="84" height="30" rx="15" fill="#DCE8DF"/>
+  <text x="1342" y="182" class="small">对话</text>
+
+  <rect x="1220" y="216" width="308" height="92" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="250" class="h2">问题摘要</text>
+  <text x="1240" y="278" class="small">这个问题影响人物一致性，建议先处理，再继续写结尾。</text>
+
+  <rect x="1248" y="330" width="280" height="94" rx="18" fill="#EAF1EC" stroke="#B7CCBC"/>
+  <text x="1268" y="362" class="small">首选方案 A：补耳鸣与握拳动作，</text>
+  <text x="1268" y="386" class="small">改动最小、人物气质最稳。</text>
+
+  <rect x="1220" y="436" width="308" height="182" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="472" class="h2">方案对比</text>
+  <text x="1240" y="500" class="small">A：补身体反应，节奏最稳</text>
+  <text x="1240" y="526" class="small">B：补短回忆，解释更强但节奏更慢</text>
+  <text x="1240" y="552" class="small">影响范围：当前段落 + 林雾人物一致性</text>
+  <rect x="1240" y="570" width="96" height="34" rx="14" fill="#486A57"/>
+  <text x="1268" y="592" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">应用方案 A</text>
+
+  <rect x="1220" y="642" width="308" height="122" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="678" class="h2">建议动作</text>
+  <text x="1240" y="706" class="small">/应用当前方案</text>
+  <text x="1330" y="706" class="small">/再来一版</text>
+  <text x="1240" y="732" class="small">/稍后处理</text>
+
+  <rect x="1220" y="784" width="308" height="58" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="810" class="small">若想追问“为什么判高优先”，</text>
+  <text x="1240" y="832" class="small">切到对话查看完整推理链。</text>
+
+  <rect x="1220" y="852" width="220" height="40" rx="18" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="1246" y="877" class="body">切到对话继续追问</text>
+  <rect x="1450" y="852" width="78" height="40" rx="18" fill="#486A57"/>
+  <text x="1471" y="877" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">打开对话</text>
+</svg>
