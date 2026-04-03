@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import type { AgentFeedItemDto, AgentTaskDto, QuickActionDto } from '@lime-novel/application'
+import type {
+  AgentFeedItemDto,
+  AgentTaskDiagnosticsDto,
+  AgentTaskDto,
+  QuickActionDto
+} from '@lime-novel/application'
 import type { NovelSurfaceId } from '@lime-novel/domain-novel'
 
 export type AgentSidebarMode = 'agent' | 'suggestions' | 'dialogue'
@@ -17,6 +22,7 @@ type AgentSidebarProps = {
   }
   tasks: AgentTaskDto[]
   feed: AgentFeedItemDto[]
+  diagnosticsByTaskId: Record<string, AgentTaskDiagnosticsDto>
   quickActions: QuickActionDto[]
   onStartTask: (intent: string, surface?: NovelSurfaceId) => void
   onApplyProposal: (proposalId: string) => void
@@ -51,6 +57,7 @@ const feedKindLabel: Record<AgentFeedItemDto['kind'], string> = {
 const surfaceLabel: Record<NovelSurfaceId, string> = {
   home: '首页',
   writing: '写作',
+  knowledge: '知识库',
   'feature-center': '功能中心',
   analysis: '拆书',
   canon: '设定',
@@ -64,10 +71,36 @@ const approvalStatusLabel: Record<NonNullable<AgentFeedItemDto['approvalStatus']
   rejected: '已拒绝'
 }
 
+const toolEventStatusLabel: Record<
+  NonNullable<AgentTaskDiagnosticsDto['toolEvents']>[number]['status'],
+  string
+> = {
+  requested: '已请求',
+  rejected: '被拒绝',
+  started: '执行中',
+  completed: '已完成',
+  failed: '失败'
+}
+
 const parseCreatedAt = (value: string): number => {
   const timestamp = Date.parse(value)
   return Number.isNaN(timestamp) ? 0 : timestamp
 }
+
+const formatDiagnosticsTime = (value: string): string => {
+  const timestamp = Date.parse(value)
+
+  if (Number.isNaN(timestamp)) {
+    return '刚刚更新'
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(timestamp))
+}
+
+const formatTokenCount = (value: number): string => new Intl.NumberFormat('zh-CN').format(value)
 
 const dedupeTasks = (tasks: AgentTaskDto[]): AgentTaskDto[] => {
   const seen = new Set<string>()
@@ -188,6 +221,7 @@ export const AgentSidebar = ({
   header,
   tasks,
   feed,
+  diagnosticsByTaskId,
   quickActions,
   onStartTask,
   onApplyProposal,
@@ -206,6 +240,16 @@ export const AgentSidebar = ({
   ]).slice(0, 4)
   const dialogueItems = [...feed].sort((left, right) => parseCreatedAt(left.createdAt) - parseCreatedAt(right.createdAt))
   const visibleQuickActions = quickActions.slice(0, 2)
+  const diagnosticsTask =
+    visibleTasks.find((task) => diagnosticsByTaskId[task.taskId] != null) ??
+    tasks.find((task) => diagnosticsByTaskId[task.taskId] != null)
+  const diagnostics = diagnosticsTask ? diagnosticsByTaskId[diagnosticsTask.taskId] : undefined
+  const recentToolEvents = diagnostics ? [...diagnostics.toolEvents].slice(-6).reverse() : []
+  const completedToolCount = diagnostics?.toolEvents.filter((event) => event.status === 'completed').length ?? 0
+  const failedToolCount = diagnostics?.toolEvents.filter((event) => event.status === 'failed').length ?? 0
+  const totalTokenCount = diagnostics
+    ? diagnostics.stats.usage.inputTokens + diagnostics.stats.usage.outputTokens
+    : 0
 
   const handleSubmit = (): void => {
     if (!draft.trim()) {
@@ -275,6 +319,65 @@ export const AgentSidebar = ({
               <div className="agent-empty-state">
                 <strong>当前没有挂起中的后台任务</strong>
                 <p>代理会在这里回报新的设定抽取、修订检查和发布预检进度。</p>
+              </div>
+            )}
+
+            <div className="agent-sidebar__section-heading">
+              <span className="eyebrow">运行轨迹</span>
+            </div>
+            {diagnostics && diagnosticsTask ? (
+              <article className="agent-runtime-card">
+                <div className="agent-runtime-card__meta">
+                  <div>
+                    <strong>{diagnosticsTask.title}</strong>
+                    <p>{diagnostics.failure ? '本轮运行出现失败收口。' : '本轮运行已记录消息与工具轨迹。'}</p>
+                  </div>
+                  <span className="agent-runtime-card__time">{formatDiagnosticsTime(diagnostics.updatedAt)}</span>
+                </div>
+                <div className="agent-summary-card__chips">
+                  <span className="memory-chip">回合 {diagnostics.stats.turnCount}</span>
+                  <span className="memory-chip">消息 {diagnostics.trace.length}</span>
+                  <span className="memory-chip">工具 {diagnostics.toolEvents.length}</span>
+                  <span className="memory-chip">完成 {completedToolCount}</span>
+                  <span className="memory-chip">Token {formatTokenCount(totalTokenCount)}</span>
+                  {diagnostics.stats.stopReason ? <span className="memory-chip">停止 {diagnostics.stats.stopReason}</span> : null}
+                  {failedToolCount > 0 ? <span className="memory-chip">失败 {failedToolCount}</span> : null}
+                </div>
+                {diagnostics.failure ? (
+                  <div className="agent-runtime-card__failure">
+                    <strong>{diagnostics.failure.subtype}</strong>
+                    <p>{diagnostics.failure.detail}</p>
+                  </div>
+                ) : null}
+                {recentToolEvents.length > 0 ? (
+                  <div className="agent-tool-events">
+                    {recentToolEvents.map((event) => (
+                      <div key={`${event.toolCallId}:${event.status}:${event.turnIndex}`} className="agent-tool-event">
+                        <div className="agent-tool-event__copy">
+                          <strong>{event.toolName}</strong>
+                          <p>
+                            第 {event.turnIndex} 轮
+                            {event.progressLabel ? ` · ${event.progressLabel}` : ''}
+                          </p>
+                          {event.error ? <p className="agent-tool-event__error">{event.error}</p> : null}
+                        </div>
+                        <span className={`task-status agent-tool-event__status task-status--${event.status === 'completed' ? 'completed' : event.status === 'failed' || event.status === 'rejected' ? 'failed' : event.status === 'started' ? 'running' : 'queued'}`}>
+                          {toolEventStatusLabel[event.status]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="agent-empty-state">
+                    <strong>当前还没有可显示的工具事件</strong>
+                    <p>下一次工具执行后，这里会展示请求、开始、完成和失败轨迹。</p>
+                  </div>
+                )}
+              </article>
+            ) : (
+              <div className="agent-empty-state">
+                <strong>当前没有运行轨迹</strong>
+                <p>只有新 runtime 路径的任务才会在这里显示工具调用轨迹。</p>
               </div>
             )}
           </div>

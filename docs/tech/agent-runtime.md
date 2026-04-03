@@ -1,7 +1,7 @@
 # Lime Novel 代理运行时设计
 
-> 版本：0.3
-> 更新：2026-04-02
+> 版本：0.4
+> 更新：2026-04-03
 
 ---
 
@@ -17,6 +17,57 @@
 - 工具如何受控执行
 - 什么结果可以自动回写，什么结果必须审批
 - 大上下文如何压缩与保留长期记忆
+
+## 1.1 当前已落地范围
+
+截至 `2026-04-03`，仓库里已经实现第一阶段可执行版本，边界如下：
+
+- 已实现
+  - `openai-compatible` provider 抽象
+  - 单代理 session loop
+  - 工具调用编排
+  - `submit_task_result` 结构化收尾
+  - 与现有 `Electron IPC + TaskEventDto + AgentFeed` 协议兼容
+  - 无模型配置时自动回退到 `legacy` 规则型 runtime
+- 已接入工具
+  - `load_workspace_snapshot`
+  - `load_chapter_document`
+  - `save_proposal_draft`
+  - `upsert_canon_candidate`
+  - `upsert_revision_issue`
+  - `submit_task_result`
+- 已实现约束
+  - 只读工具并发、写工具串行
+  - proposal / publish artifact 自动映射到现有右栏卡片与动作
+  - 模型调用失败显式标记任务失败，不伪造成功结果
+- 暂未实现
+  - 多代理协同
+  - MCP 工具接入
+  - 远端执行 / worktree
+  - 动态插件发现与隔离运行
+  - 长时记忆压缩与恢复
+
+## 1.2 运行时切换
+
+运行时通过环境变量切换：
+
+```bash
+LIME_NOVEL_AGENT_PROVIDER=openai-compatible
+LIME_NOVEL_AGENT_BASE_URL=https://api.openai.com/v1
+LIME_NOVEL_AGENT_API_KEY=...
+LIME_NOVEL_AGENT_MODEL=gpt-4.1-mini
+LIME_NOVEL_AGENT_MAX_STEPS=6
+LIME_NOVEL_AGENT_MAX_TOOL_CONCURRENCY=4
+LIME_NOVEL_AGENT_MAX_STRUCTURED_OUTPUT_RETRIES=5
+LIME_NOVEL_AGENT_REQUEST_TIMEOUT_MS=90000
+LIME_NOVEL_AGENT_TEMPERATURE=0.2
+```
+
+判定规则：
+
+- 显式设置 `LIME_NOVEL_AGENT_PROVIDER=legacy` 时，强制走旧 runtime
+- 未显式设置 provider，但存在 `BASE_URL` 或 `API_KEY` 时，自动走 `openai-compatible`
+- 两者都没有时，默认走 `legacy`
 
 ## 2. 角色模型
 

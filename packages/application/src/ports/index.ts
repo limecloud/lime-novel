@@ -2,6 +2,7 @@ import type {
   ApplyProjectStrategyProposalInputDto,
   ApplyProjectStrategyProposalResultDto,
   AgentFeedItemDto,
+  AgentTaskDiagnosticsDto,
   AgentTaskDto,
   CanonCandidateDto,
   CommitCanonCardInputDto,
@@ -10,8 +11,11 @@ import type {
   CreateProjectResultDto,
   CreateExportPackageInputDto,
   CreateExportPackageResultDto,
+  GenerateKnowledgeAnswerInputDto,
+  GenerateKnowledgeAnswerResultDto,
   ImportAnalysisSampleInputDto,
   ImportAnalysisSampleResultDto,
+  KnowledgeDocumentDetailDto,
   ApplyProposalResultDto,
   ChapterDocumentDto,
   RejectProposalResultDto,
@@ -34,6 +38,8 @@ import type {
 export interface ProjectRepositoryPort {
   loadWorkspaceShell(): Promise<WorkspaceShellDto>
   searchWorkspace(input: WorkspaceSearchInputDto): Promise<WorkspaceSearchResultDto>
+  loadKnowledgeDocument(relativePath: string): Promise<KnowledgeDocumentDetailDto>
+  generateKnowledgeAnswer(input: GenerateKnowledgeAnswerInputDto): Promise<GenerateKnowledgeAnswerResultDto>
   updateWorkspaceContext(input: UpdateWorkspaceContextInputDto): Promise<void>
   loadChapterDocument(chapterId: string): Promise<ChapterDocumentDto>
   saveChapterDocument(input: SaveChapterInputDto): Promise<SaveChapterResultDto>
@@ -63,6 +69,7 @@ export interface ProjectRepositoryPort {
 
 export interface AgentRuntimePort {
   startTask(input: StartTaskInputDto): Promise<StartTaskResultDto>
+  loadTaskDiagnostics(): Promise<AgentTaskDiagnosticsDto[]>
   subscribe(listener: (event: TaskEventDto) => void): () => void
 }
 

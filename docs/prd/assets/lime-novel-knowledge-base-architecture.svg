@@ -1,0 +1,124 @@
+<svg width="1600" height="980" viewBox="0 0 1600 980" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgKbArch" x1="0" y1="0" x2="1600" y2="980" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EFE4"/>
+      <stop offset="1" stop-color="#E7DED1"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 30px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .sub { font: 500 17px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #625A50; }
+    .section { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .boxTitle { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .boxBody { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #746C60; }
+  </style>
+
+  <rect width="1600" height="980" rx="28" fill="url(#bgKbArch)"/>
+  <rect x="24" y="24" width="1552" height="932" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+
+  <text x="64" y="84" class="title">Lime Novel 小说知识库架构图</text>
+  <text x="64" y="118" class="sub">知识库不是独立飞地，而是位于作品资产、代理编排和前台工作面之间的知识编译层。</text>
+
+  <text x="64" y="178" class="section">一、作者工作层</text>
+  <g>
+    <rect x="64" y="204" width="248" height="106" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="132" y="246" class="boxTitle">项目首页</text>
+    <text x="96" y="278" class="small">恢复现场 / 知识健康度 / 最近结果</text>
+  </g>
+  <g>
+    <rect x="344" y="204" width="248" height="106" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="412" y="246" class="boxTitle">写作工作面</text>
+    <text x="380" y="278" class="small">消费知识层 / 续写 / 修订 / 提问</text>
+  </g>
+  <g>
+    <rect x="624" y="204" width="248" height="106" rx="20" fill="#DCE8DF" stroke="#B7CCBC"/>
+    <text x="684" y="246" class="boxTitle">知识工作面</text>
+    <text x="654" y="278" class="small">知识页 / 证据 / 冲突 / 查询产物</text>
+  </g>
+  <g>
+    <rect x="904" y="204" width="248" height="106" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="972" y="246" class="boxTitle">修订工作面</text>
+    <text x="944" y="278" class="small">接住巡检问题 / 差异 / 修复建议</text>
+  </g>
+  <g>
+    <rect x="1184" y="204" width="324" height="106" rx="20" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="1274" y="246" class="boxTitle">发布工作面</text>
+    <text x="1222" y="278" class="small">消费摘要 / 资料包 / 平台说明 / 导出文案</text>
+  </g>
+
+  <text x="64" y="386" class="section">二、代理编排层</text>
+  <g>
+    <rect x="64" y="412" width="248" height="122" rx="20" fill="#DCE8DF" stroke="#B7CCBC"/>
+    <text x="122" y="454" class="boxTitle">项目总控代理</text>
+    <text x="94" y="486" class="boxBody">决定当前优先跑编译、问答、巡检还是回写，负责恢复项目现场。</text>
+  </g>
+  <g>
+    <rect x="344" y="412" width="248" height="122" rx="20" fill="#E7EDF0" stroke="#C8D3D7"/>
+    <text x="402" y="454" class="boxTitle">知识编译代理</text>
+    <text x="374" y="486" class="boxBody">从正文、资料和旧产物中提取对象，增量更新知识页与证据。</text>
+  </g>
+  <g>
+    <rect x="624" y="412" width="248" height="122" rx="20" fill="#EFE5D4" stroke="#D7C8AD"/>
+    <text x="694" y="454" class="boxTitle">查询代理</text>
+    <text x="654" y="486" class="boxBody">围绕用户问题组织检索、阅读、归纳并生成文件化答案。</text>
+  </g>
+  <g>
+    <rect x="904" y="412" width="248" height="122" rx="20" fill="#F4E6E1" stroke="#E0BDB1"/>
+    <text x="974" y="454" class="boxTitle">巡检代理</text>
+    <text x="938" y="486" class="boxBody">发现冲突、重复、证据缺口和时间线异常，形成修复建议。</text>
+  </g>
+  <g>
+    <rect x="1184" y="412" width="324" height="122" rx="20" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="1272" y="454" class="boxTitle">审批与回写守护</text>
+    <text x="1218" y="486" class="boxBody">控制升级为 canon、批量合并、覆盖正文、外部事实写回等高风险动作。</text>
+  </g>
+
+  <text x="64" y="610" class="section">三、知识编译层</text>
+  <g>
+    <rect x="64" y="636" width="292" height="146" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="94" y="680" class="boxTitle">原始资料清单</text>
+    <text x="94" y="712" class="boxBody">网页转存 / 图片 / 读书笔记 / 角色草稿 / 外部研究 / 旧问答产物</text>
+    <text x="94" y="740" class="small">先收住资料来源，再进入理解和编译。</text>
+  </g>
+  <g>
+    <rect x="388" y="636" width="292" height="146" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="418" y="680" class="boxTitle">知识页与对象层</text>
+    <text x="418" y="712" class="boxBody">人物 / 地点 / 规则 / 道具 / 事件 / 主题 / 章节摘要 / 关系页</text>
+    <text x="418" y="740" class="small">以 Markdown 页面承载可增量维护的工作知识。</text>
+  </g>
+  <g>
+    <rect x="712" y="636" width="292" height="146" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="742" y="680" class="boxTitle">证据与冲突层</text>
+    <text x="742" y="712" class="boxBody">来源引用 / 反向链接 / 候选事实 / 冲突标记 / stale 页面 / 问题建议</text>
+    <text x="742" y="740" class="small">让知识页不是“结论孤岛”，而是可回溯对象。</text>
+  </g>
+  <g>
+    <rect x="1036" y="636" width="472" height="146" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="1066" y="680" class="boxTitle">查询与产物层</text>
+    <text x="1066" y="712" class="boxBody">answer.md / report.md / slides.md / chart.png / lint-report.md / quick-brief.md</text>
+    <text x="1066" y="740" class="small">问答不是终点，输出文件也是下一轮可再次读取的项目资产。</text>
+  </g>
+
+  <text x="64" y="858" class="section">四、项目资产与工具层</text>
+  <rect x="64" y="884" width="1444" height="48" rx="16" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="96" y="914" class="boxBody">raw/ 原始资料</text>
+  <text x="308" y="914" class="boxBody">compiled/ 工作知识</text>
+  <text x="556" y="914" class="boxBody">canon/ 确认事实</text>
+  <text x="786" y="914" class="boxBody">manuscript/ 正文</text>
+  <text x="1004" y="914" class="boxBody">outputs/ 结果文件</text>
+  <text x="1220" y="914" class="boxBody">索引 / 搜索 / 引用 / 导出 / 写回工具</text>
+
+  <g stroke="#C9BDA9" stroke-width="2.5" stroke-linecap="round">
+    <path d="M188 310V412"/>
+    <path d="M468 310V412"/>
+    <path d="M748 310V412"/>
+    <path d="M1028 310V412"/>
+    <path d="M1346 310V412"/>
+    <path d="M188 534V636"/>
+    <path d="M468 534V636"/>
+    <path d="M748 534V636"/>
+    <path d="M1028 534V636"/>
+    <path d="M1346 534V636"/>
+  </g>
+</svg>

@@ -1,0 +1,93 @@
+<svg width="1600" height="960" viewBox="0 0 1600 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgKbFlow" x1="0" y1="0" x2="1600" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EEE3"/>
+      <stop offset="1" stop-color="#E8DED0"/>
+    </linearGradient>
+    <marker id="arrowFlow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0L10 5L0 10Z" fill="#AA957B"/>
+    </marker>
+  </defs>
+  <style>
+    .title { font: 700 30px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .sub { font: 500 17px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #625A50; }
+    .section { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .boxTitle { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .boxBody { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #746C60; }
+  </style>
+
+  <rect width="1600" height="960" rx="28" fill="url(#bgKbFlow)"/>
+  <rect x="24" y="24" width="1552" height="912" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+
+  <text x="64" y="84" class="title">Lime Novel 小说知识库闭环流程图</text>
+  <text x="64" y="118" class="sub">核心不是“建库”本身，而是让导入、编译、提问、巡检和回写形成可持续增量循环。</text>
+
+  <g>
+    <rect x="112" y="210" width="248" height="118" rx="22" fill="#E7EDF0" stroke="#C8D3D7"/>
+    <text x="180" y="254" class="boxTitle">1. 导入素材</text>
+    <text x="144" y="286" class="boxBody">网页转存、章节草稿、图片、读书笔记、旧报告进入 `raw/`。</text>
+  </g>
+  <g>
+    <rect x="424" y="210" width="248" height="118" rx="22" fill="#DCE8DF" stroke="#B7CCBC"/>
+    <text x="492" y="254" class="boxTitle">2. 建立索引</text>
+    <text x="456" y="286" class="boxBody">记录来源、类型、项目归属和更新时间，形成可追踪清单。</text>
+  </g>
+  <g>
+    <rect x="736" y="210" width="248" height="118" rx="22" fill="#EFE5D4" stroke="#D7C8AD"/>
+    <text x="804" y="254" class="boxTitle">3. 编译知识</text>
+    <text x="768" y="286" class="boxBody">提取人物、地点、规则、事件，更新 `compiled/` 页面。</text>
+  </g>
+  <g>
+    <rect x="1048" y="210" width="248" height="118" rx="22" fill="#F4E6E1" stroke="#E0BDB1"/>
+    <text x="1116" y="254" class="boxTitle">4. 标记风险</text>
+    <text x="1080" y="286" class="boxBody">检测重复页、冲突、证据缺口和 stale 页面，生成巡检结论。</text>
+  </g>
+
+  <g>
+    <rect x="268" y="444" width="248" height="118" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="336" y="488" class="boxTitle">5. 针对项目提问</text>
+    <text x="300" y="520" class="boxBody">作者提问，查询代理读取相关知识页、正文、canon 和已有输出。</text>
+  </g>
+  <g>
+    <rect x="676" y="444" width="248" height="118" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="744" y="488" class="boxTitle">6. 生成结果文件</text>
+    <text x="708" y="520" class="boxBody">答案落成 Markdown 报告、简报、幻灯片或图表，写入 `outputs/`。</text>
+  </g>
+  <g>
+    <rect x="1084" y="444" width="248" height="118" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="1152" y="488" class="boxTitle">7. 用户确认</text>
+    <text x="1116" y="520" class="boxBody">决定是否升级为 canon、是否批量修复冲突、是否回写正文。</text>
+  </g>
+
+  <g>
+    <rect x="424" y="678" width="248" height="118" rx="22" fill="#DCE8DF" stroke="#B7CCBC"/>
+    <text x="492" y="722" class="boxTitle">8. 回写项目</text>
+    <text x="456" y="754" class="boxBody">更新反向链接、摘要、候选卡，必要时升级正式设定或问题队列。</text>
+  </g>
+  <g>
+    <rect x="928" y="678" width="248" height="118" rx="22" fill="#E7EDF0" stroke="#C8D3D7"/>
+    <text x="996" y="722" class="boxTitle">9. 项目变聪明</text>
+    <text x="960" y="754" class="boxBody">新的答案、发现和修复再次成为下一轮检索与编译的输入。</text>
+  </g>
+
+  <path d="M360 269H424" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M672 269H736" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M984 269H1048" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M1172 328C1212 362 1248 396 1230 444" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M1084 503H924" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M676 503H516" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M392 562C388 616 412 650 458 678" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M672 737H928" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M1052 678C1022 620 988 574 930 554" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+  <path d="M548 678C514 626 500 590 516 562" stroke="#AA957B" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowFlow)"/>
+
+  <rect x="1226" y="664" width="276" height="148" rx="22" fill="#FFF9EF" stroke="#D9D0C0"/>
+  <text x="1256" y="706" class="boxTitle">流程判断</text>
+  <text x="1256" y="736" class="small">自动执行：</text>
+  <text x="1328" y="736" class="small">索引、摘要、反向链接、结果入库</text>
+  <text x="1256" y="764" class="small">需要确认：</text>
+  <text x="1328" y="764" class="small">升级 canon、批量合并、正文回写</text>
+  <text x="1256" y="792" class="small">闭环目标：</text>
+  <text x="1328" y="792" class="small">每次提问和巡检都让项目知识层继续生长</text>
+</svg>

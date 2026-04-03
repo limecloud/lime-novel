@@ -1,0 +1,91 @@
+<svg width="1600" height="980" viewBox="0 0 1600 980" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgKbSeq" x1="0" y1="0" x2="1600" y2="980" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6F0E4"/>
+      <stop offset="1" stop-color="#E7DECF"/>
+    </linearGradient>
+    <marker id="arrowSeq" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0L10 5L0 10Z" fill="#9F8C75"/>
+    </marker>
+  </defs>
+  <style>
+    .title { font: 700 30px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .sub { font: 500 17px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #625A50; }
+    .actor { font: 700 16px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .body { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #746C60; }
+    .section { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+  </style>
+
+  <rect width="1600" height="980" rx="28" fill="url(#bgKbSeq)"/>
+  <rect x="24" y="24" width="1552" height="932" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+
+  <text x="64" y="84" class="title">Lime Novel 小说知识库问答时序图</text>
+  <text x="64" y="118" class="sub">示例问题：某角色当前知道什么。关键点在于证据先被读取和组织，答案最终落成项目文件。</text>
+
+  <g>
+    <rect x="82" y="168" width="164" height="54" rx="18" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="144" y="202" class="actor">作者</text>
+    <rect x="302" y="168" width="164" height="54" rx="18" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="352" y="202" class="actor">Renderer</text>
+    <rect x="522" y="168" width="164" height="54" rx="18" fill="#F0E7DA" stroke="#D9D0C0"/>
+    <text x="558" y="202" class="actor">Application</text>
+    <rect x="742" y="168" width="184" height="54" rx="18" fill="#DCE8DF" stroke="#B7CCBC"/>
+    <text x="790" y="202" class="actor">查询代理</text>
+    <rect x="982" y="168" width="184" height="54" rx="18" fill="#E7EDF0" stroke="#C8D3D7"/>
+    <text x="1020" y="202" class="actor">搜索工具</text>
+    <rect x="1222" y="168" width="184" height="54" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+    <text x="1262" y="202" class="actor">知识存储</text>
+    <rect x="1424" y="168" width="110" height="54" rx="18" fill="#EFE5D4" stroke="#D7C8AD"/>
+    <text x="1456" y="202" class="actor">输出器</text>
+  </g>
+
+  <g stroke="#D1C6B4" stroke-width="2" stroke-dasharray="8 8">
+    <path d="M164 222V870"/>
+    <path d="M384 222V870"/>
+    <path d="M604 222V870"/>
+    <path d="M834 222V870"/>
+    <path d="M1074 222V870"/>
+    <path d="M1314 222V870"/>
+    <path d="M1478 222V870"/>
+  </g>
+
+  <text x="64" y="282" class="section">关键链路</text>
+
+  <path d="M164 320H384" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="208" y="308" class="body">1. 提问：林清远现在知道什么？</text>
+
+  <path d="M384 368H604" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="434" y="356" class="body">2. 创建查询任务</text>
+
+  <path d="M604 416H834" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="652" y="404" class="body">3. 附带项目上下文与输出偏好</text>
+
+  <path d="M834 464H1074" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="874" y="452" class="body">4. 请求命中相关知识页与章节证据</text>
+
+  <path d="M1074 512H1314" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="1122" y="500" class="body">5. 检索 compiled / canon / manuscript / outputs</text>
+
+  <path d="M1314 560H1074" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="1134" y="548" class="body">6. 返回命中文档、摘要、引用、冲突标记</text>
+
+  <path d="M1074 608H834" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="874" y="596" class="body">7. 聚合证据并组织答案结构</text>
+
+  <path d="M834 656H1478" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="968" y="644" class="body">8. 生成 report.md，并附来源与未决问题</text>
+
+  <path d="M1478 704H604" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="934" y="692" class="body">9. 返回文件路径、引用来源和建议后续问题</text>
+
+  <path d="M604 752H384" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="420" y="740" class="body">10. 更新任务状态与预览</text>
+
+  <path d="M384 800H164" stroke="#9F8C75" stroke-width="3" marker-end="url(#arrowSeq)"/>
+  <text x="196" y="788" class="body">11. 展示答案文件，并允许写回项目</text>
+
+  <rect x="106" y="840" width="1388" height="72" rx="18" fill="#FFF9EF" stroke="#D9D0C0"/>
+  <text x="136" y="872" class="body">时序判断：真正需要被保存的不是“回答文本”，而是查询命中、证据组织和最终结果文件。这样下一次同类问题无需重新从零开始。</text>
+  <text x="136" y="898" class="small">如果用户确认，这个 `report.md` 还可以再进入 `outputs/` 索引，成为后续写作与修订的长期项目资产。</text>
+</svg>

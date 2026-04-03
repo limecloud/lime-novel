@@ -1,0 +1,112 @@
+<svg width="1600" height="960" viewBox="0 0 1600 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgKbQuery" x1="0" y1="0" x2="1600" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EFE4"/>
+      <stop offset="1" stop-color="#E9E0D2"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 24px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h1 { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h2 { font: 700 15px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .body { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #7A7368; }
+  </style>
+
+  <rect width="1600" height="960" rx="28" fill="url(#bgKbQuery)"/>
+  <rect x="24" y="24" width="1552" height="912" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+  <rect x="24" y="24" width="1552" height="56" rx="24" fill="#F7F2E8"/>
+  <text x="56" y="59" class="title">Lime Novel / 知识查询工作面</text>
+  <text x="1016" y="59" class="body">复杂问题的中心不应该是聊天气泡，而应该是命中证据、输出格式和回写动作</text>
+
+  <rect x="44" y="100" width="72" height="816" rx="20" fill="#F2EBDD" stroke="#DDD3C3"/>
+  <rect x="56" y="252" width="48" height="48" rx="14" fill="#486A57"/>
+  <text x="72" y="282" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#F7F4EE">知</text>
+
+  <rect x="132" y="100" width="272" height="816" rx="22" fill="#F3ECE0" stroke="#DDD3C3"/>
+  <text x="160" y="140" class="h1">问题与范围</text>
+  <rect x="160" y="164" width="216" height="98" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="182" y="196" class="small">问题：</text>
+  <text x="182" y="222" class="small">林清远在第 12 章前到底知道什么，</text>
+  <text x="182" y="246" class="small">又误判了什么？</text>
+
+  <text x="160" y="316" class="h2">读取范围</text>
+  <rect x="160" y="332" width="216" height="168" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="182" y="364" class="small">compiled/ 角色页</text>
+  <text x="182" y="392" class="small">canon/ 核心设定</text>
+  <text x="182" y="420" class="small">manuscript/ 第 8 - 12 章</text>
+  <text x="182" y="448" class="small">outputs/ 最近 2 份报告</text>
+
+  <text x="160" y="556" class="h2">输出格式</text>
+  <rect x="160" y="572" width="216" height="186" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="182" y="604" class="small">report.md</text>
+  <text x="182" y="632" class="small">brief.md</text>
+  <text x="182" y="660" class="small">slides.md</text>
+  <text x="182" y="688" class="small">chart.png</text>
+  <rect x="182" y="714" width="124" height="34" rx="16" fill="#486A57"/>
+  <text x="222" y="736" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#F7F4EE">生成 report</text>
+
+  <rect x="428" y="100" width="736" height="816" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="460" y="140" class="h1">证据命中与结果预览</text>
+  <rect x="460" y="168" width="676" height="52" rx="18" fill="#F7F2E8"/>
+  <text x="488" y="200" class="body">问题：林清远在第 12 章前知道什么，又误判了什么？</text>
+
+  <rect x="460" y="248" width="300" height="202" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="486" y="284" class="h2">命中文档</text>
+  <text x="486" y="314" class="small">人物页：林清远</text>
+  <text x="486" y="342" class="small">章节摘要：第 8 / 11 / 12 章</text>
+  <text x="486" y="370" class="small">规则页：时间裂缝</text>
+  <text x="486" y="398" class="small">旧报告：旧站台线索收束</text>
+
+  <rect x="796" y="248" width="340" height="202" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="822" y="284" class="h2">关键证据</text>
+  <text x="822" y="314" class="small">第 11 章：她确认钥匙与旧站台有关</text>
+  <text x="822" y="342" class="small">第 12 章：她仍未确认钟楼入口的真实含义</text>
+  <text x="822" y="370" class="small">角色页：钟声和高处会干扰她的判断</text>
+
+  <rect x="460" y="478" width="676" height="278" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="486" y="514" class="h2">report.md 预览</text>
+  <text x="486" y="544" class="body">结论：到第 12 章前，林清远已经掌握“钥匙 - 旧站台 - 钟楼”属于同一线索群，但她仍把父亲失踪的核心原因误判为单一人为遮掩。</text>
+  <text x="486" y="578" class="small">证据：第 11 章旧站台确认、第 12 章门前迟疑、人物页中的情绪阈值描述。</text>
+  <text x="486" y="606" class="small">未决问题：她是否已经意识到“时间裂缝”与父亲失踪在同一层因果里？</text>
+  <text x="486" y="634" class="small">建议后续问题：第 12 章应揭示到哪一层，才不会过早打穿悬念？</text>
+
+  <rect x="460" y="782" width="220" height="42" rx="18" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="490" y="808" class="body">写入 outputs/report.md</text>
+  <rect x="696" y="782" width="170" height="42" rx="18" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="726" y="808" class="body">升级为知识页附录</text>
+  <rect x="882" y="782" width="166" height="42" rx="18" fill="#486A57"/>
+  <text x="926" y="808" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#F7F4EE">确认生成</text>
+
+  <rect x="1192" y="100" width="364" height="816" rx="22" fill="#F7F2E8" stroke="#DDD3C3"/>
+  <text x="1220" y="140" class="h1">查询代理</text>
+  <rect x="1220" y="162" width="84" height="30" rx="15" fill="#486A57"/>
+  <text x="1248" y="182" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">建议</text>
+  <rect x="1314" y="162" width="84" height="30" rx="15" fill="#DCE8DF"/>
+  <text x="1342" y="182" class="small">对话</text>
+
+  <rect x="1220" y="216" width="308" height="118" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="250" class="h2">查询摘要</text>
+  <text x="1240" y="278" class="small">我已读取角色页、3 章正文和最近旧报告，</text>
+  <text x="1240" y="302" class="small">当前最稳的回答格式是 `report.md`。</text>
+
+  <rect x="1248" y="360" width="280" height="96" rx="18" fill="#EAF1EC" stroke="#B7CCBC"/>
+  <text x="1268" y="392" class="small">建议保留“她仍误判了什么”这个部分，</text>
+  <text x="1268" y="416" class="small">它最能直接反哺第 12 章的信息揭示节奏。</text>
+
+  <rect x="1220" y="482" width="308" height="186" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="518" class="h2">命中来源</text>
+  <text x="1240" y="546" class="small">compiled：1 页人物页，1 页规则页</text>
+  <text x="1240" y="572" class="small">manuscript：第 8 / 11 / 12 章</text>
+  <text x="1240" y="598" class="small">outputs：旧站台线索收束报告</text>
+  <text x="1240" y="624" class="small">未命中：角色关系图，可选补读</text>
+
+  <rect x="1220" y="692" width="308" height="138" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="728" class="h2">建议动作</text>
+  <text x="1240" y="756" class="small">/生成简版 brief</text>
+  <text x="1368" y="756" class="small">/写回知识页</text>
+  <text x="1240" y="782" class="small">/继续追问“该在第12章揭示多少”</text>
+
+  <rect x="1220" y="852" width="308" height="42" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="878" class="small">查询工作面的默认输出应该是文件，而不是一次性聊天文本。</text>
+</svg>

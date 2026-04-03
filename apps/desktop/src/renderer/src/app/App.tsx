@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import type { GenerateKnowledgeAnswerInputDto, GenerateKnowledgeAnswerResultDto } from '@lime-novel/application'
 import type { FeatureToolId, NovelSurfaceId } from '@lime-novel/domain-novel'
 import { desktopApi } from '../lib/desktop-api'
 import { agentFeedStore, useAgentFeedState } from '../lib/agent-feed-store'
@@ -20,6 +21,12 @@ const surfaceHeaderFallback = {
     currentAgent: '章节代理',
     activeSubAgent: '设定扫描子代理',
     memorySources: ['本章目标', '当前场景', '人物画像', '最近提议'],
+    riskLevel: 'medium' as const
+  },
+  knowledge: {
+    currentAgent: '知识代理',
+    activeSubAgent: '知识编译子代理',
+    memorySources: ['raw 素材', 'compiled 知识页', 'canon 设定', 'outputs 结果'],
     riskLevel: 'medium' as const
   },
   'feature-center': {
@@ -180,6 +187,22 @@ export const App = () => {
   const updateContextMutation = useMutation({
     mutationFn: (payload: { surface: NovelSurfaceId; featureTool?: FeatureToolId; chapterId?: string }) =>
       desktopApi.workspace.updateContext(payload)
+  })
+
+  const generateKnowledgeAnswerMutation = useMutation({
+    mutationFn: (payload: GenerateKnowledgeAnswerInputDto): Promise<GenerateKnowledgeAnswerResultDto> =>
+      desktopApi.knowledge.generateAnswer(payload),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      agentFeedStore.addLocalStatus('知识问答已写入项目', result.summary, result.relativePath)
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        '知识问答生成失败',
+        error instanceof Error ? error.message : '当前问题暂时无法写入知识输出目录。',
+        '请换个问法，或先补充更多项目资料'
+      )
+    }
   })
 
   const createProjectMutation = useMutation({
@@ -436,6 +459,29 @@ export const App = () => {
     })
   }, [shellQuery.data])
 
+  useEffect(() => {
+    const shell = shellQuery.data
+
+    if (!shell) {
+      return
+    }
+
+    const activeTaskIds = new Set(shell.agentTasks.map((task) => task.taskId))
+    let disposed = false
+
+    void desktopApi.agent.loadTaskDiagnostics().then((diagnostics) => {
+      if (disposed) {
+        return
+      }
+
+      agentFeedStore.mergeDiagnostics(diagnostics.filter((item) => activeTaskIds.has(item.taskId)))
+    }).catch(() => undefined)
+
+    return () => {
+      disposed = true
+    }
+  }, [shellQuery.data])
+
   const displayFeedState = useMemo(() => {
     const feedSurface =
       activeSurface === 'feature-center' && activeFeatureTool === 'analysis' ? 'analysis' : activeSurface
@@ -452,7 +498,8 @@ export const App = () => {
             surface: feedSurface
           },
       tasks: surfaceTasks.length > 0 ? surfaceTasks : feedState.tasks.slice(0, 3),
-      feed: feedState.feed
+      feed: feedState.feed,
+      diagnosticsByTaskId: feedState.diagnosticsByTaskId
     }
   }, [activeFeatureTool, activeSurface, feedState])
 
@@ -505,6 +552,10 @@ export const App = () => {
       return '正在生成导出包'
     }
 
+    if (generateKnowledgeAnswerMutation.isPending) {
+      return '正在生成知识问答'
+    }
+
     if (chapterQuery.isFetching && activeChapterId) {
       return '正在加载章节'
     }
@@ -519,6 +570,7 @@ export const App = () => {
     commitCanonCardMutation.isPending,
     createProjectMutation.isPending,
     createExportPackageMutation.isPending,
+    generateKnowledgeAnswerMutation.isPending,
     importAnalysisSampleMutation.isPending,
     openProjectMutation.isPending,
     rejectProposalMutation.isPending,
@@ -579,6 +631,7 @@ export const App = () => {
       isImportingAnalysisSample={importAnalysisSampleMutation.isPending}
       isApplyingAnalysisStrategy={applyProjectStrategyProposalMutation.isPending}
       isCreatingExportPackage={createExportPackageMutation.isPending}
+      isGeneratingKnowledgeAnswer={generateKnowledgeAnswerMutation.isPending}
       onSurfaceChange={(surface) => {
         const nextState = resolveWorkspaceSurfaceState(surface)
         setActiveSurface(nextState.surface)
@@ -685,6 +738,7 @@ export const App = () => {
       onCreateExportPackage={(payload) => {
         createExportPackageMutation.mutate(payload)
       }}
+      onCreateKnowledgeAnswer={(payload) => generateKnowledgeAnswerMutation.mutateAsync(payload)}
     />
   )
 }

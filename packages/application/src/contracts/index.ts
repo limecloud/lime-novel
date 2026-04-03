@@ -1,13 +1,17 @@
 import type {
   ApplyProjectStrategyProposalInputDto,
   ApplyProjectStrategyProposalResultDto,
+  AgentTaskDiagnosticsDto,
   CommitCanonCardInputDto,
   CommitCanonCardResultDto,
   CreateProjectInputDto,
   CreateProjectResultDto,
   CreateExportPackageInputDto,
   CreateExportPackageResultDto,
+  GenerateKnowledgeAnswerInputDto,
+  GenerateKnowledgeAnswerResultDto,
   ImportAnalysisSampleResultDto,
+  KnowledgeDocumentDetailDto,
   OpenProjectResultDto,
   ApplyProposalResultDto,
   ChapterDocumentDto,
@@ -34,6 +38,10 @@ export type DesktopApiContract = {
     openProjectDialog: () => Promise<OpenProjectResultDto | null>
     createProject: (input: CreateProjectInputDto) => Promise<CreateProjectResultDto>
   }
+  knowledge: {
+    loadDocument: (relativePath: string) => Promise<KnowledgeDocumentDetailDto>
+    generateAnswer: (input: GenerateKnowledgeAnswerInputDto) => Promise<GenerateKnowledgeAnswerResultDto>
+  }
   chapter: {
     loadDocument: (chapterId: string) => Promise<ChapterDocumentDto>
     saveDocument: (input: SaveChapterInputDto) => Promise<SaveChapterResultDto>
@@ -58,6 +66,7 @@ export type DesktopApiContract = {
   }
   agent: {
     startTask: (input: StartTaskInputDto) => Promise<StartTaskResultDto>
+    loadTaskDiagnostics: () => Promise<AgentTaskDiagnosticsDto[]>
     subscribeTaskEvents: (callback: (event: TaskEventDto) => void) => () => void
   }
 }

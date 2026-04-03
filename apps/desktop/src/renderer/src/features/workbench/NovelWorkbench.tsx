@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type {
   AnalysisOverviewDto,
   AnalysisSampleDto,
   AgentFeedItemDto,
   AgentHeaderDto,
+  AgentTaskDiagnosticsDto,
   AgentTaskDto,
   ApplyProjectStrategyProposalInputDto,
   CanonCandidateDto,
@@ -11,8 +12,8 @@ import type {
   ChapterListItemDto,
   CreateExportPackageInputDto,
   CreateProjectInputDto,
-  ExportComparisonDto,
-  ExportPresetDto,
+  GenerateKnowledgeAnswerInputDto,
+  GenerateKnowledgeAnswerResultDto,
   QuickActionDto,
   RevisionIssueDto,
   RevisionRecordDto,
@@ -26,11 +27,22 @@ import type { AgentSidebarMode } from '../agent-feed/AgentSidebar'
 import { desktopApi } from '../../lib/desktop-api'
 import limeLogoUrl from '../../assets/logo-lime.png'
 import { limeNovelBrand } from '../../app/branding'
+import { KnowledgeStructurePanel } from '../knowledge/KnowledgeStructurePanel'
+import { KnowledgeSurface } from '../knowledge/KnowledgeSurface'
+import { knowledgeBucketLabel } from '../knowledge/knowledge-model'
+import { useKnowledgeWorkbenchState } from '../knowledge/useKnowledgeWorkbenchState'
+import { PublishStructurePanel } from '../publish/PublishStructurePanel'
+import { PublishSurface } from '../publish/PublishSurface'
+import { usePublishWorkbenchState } from '../publish/usePublishWorkbenchState'
+import { WorkspaceSearchModal } from '../workspace-search/WorkspaceSearchModal'
+import { useWorkspaceSearch } from '../workspace-search/useWorkspaceSearch'
+import { formatCount, formatDateTime, summarizePath } from './workbench-format'
 
 type AgentFeedSnapshot = {
   header: AgentHeaderDto
   tasks: AgentTaskDto[]
   feed: AgentFeedItemDto[]
+  diagnosticsByTaskId: Record<string, AgentTaskDiagnosticsDto>
 }
 
 type NovelWorkbenchProps = {
@@ -47,6 +59,7 @@ type NovelWorkbenchProps = {
   isImportingAnalysisSample: boolean
   isApplyingAnalysisStrategy: boolean
   isCreatingExportPackage: boolean
+  isGeneratingKnowledgeAnswer: boolean
   onSurfaceChange: (surface: NovelSurfaceId) => void
   onFeatureToolChange: (tool?: FeatureToolId) => void
   onCreateProject: (input: CreateProjectInputDto) => void
@@ -64,6 +77,7 @@ type NovelWorkbenchProps = {
   onUpdateRevisionIssue: (issueId: string, status: 'open' | 'deferred' | 'resolved') => void
   onUndoRevisionRecord: (recordId: string) => void
   onCreateExportPackage: (input: CreateExportPackageInputDto) => void
+  onCreateKnowledgeAnswer: (input: GenerateKnowledgeAnswerInputDto) => Promise<GenerateKnowledgeAnswerResultDto>
 }
 
 type CreateProjectTemplateId = CreateProjectInputDto['template']
@@ -129,20 +143,10 @@ const issueSeverityTone: Record<RevisionIssueDto['severity'], string> = {
   high: 'high'
 }
 
-const exportStatusLabel: Record<ExportPresetDto['status'], string> = {
-  ready: '可导出',
-  draft: '待补齐元数据'
-}
-
-const riskLevelLabel: Record<ExportComparisonDto['riskLevel'], string> = {
-  low: '低风险',
-  medium: '需复核',
-  high: '高风险'
-}
-
 const surfaceLabel: Record<NovelSurfaceId, string> = {
   home: '首页',
   writing: '写作',
+  knowledge: '知识',
   'feature-center': '功能中心',
   analysis: '拆书',
   canon: '设定',
@@ -158,16 +162,6 @@ const featureCenterEntry = {
   id: 'feature-center' as const,
   label: '功能中心',
   description: '插件式创作能力与辅助工具'
-}
-
-const searchItemKindLabel: Record<WorkspaceSearchItemDto['kind'], string> = {
-  project: '项目',
-  chapter: '章节',
-  scene: '场景',
-  'analysis-sample': '拆书样本',
-  'canon-card': '设定卡',
-  'revision-issue': '修订问题',
-  'export-preset': '导出预设'
 }
 
 const resolveWorkspaceSearchSurfaceLabel = (item: WorkspaceSearchItemDto): string => {
@@ -209,8 +203,6 @@ const canonCategoryDefinitions: Array<{
     match: (card) => card.kind === 'timeline-event'
   }
 ]
-
-const formatCount = (value: number): string => new Intl.NumberFormat('zh-CN').format(value)
 
 const extractParagraphs = (content?: string): string[] =>
   (content ?? '')
@@ -279,137 +271,6 @@ const buildCanonTimeline = (
       : chapter.summary
   }))
 
-const suggestNextPublishVersion = (shell: WorkspaceShellDto): string => {
-  if (!shell.recentExports[0] && !shell.project.lastPublishedAt) {
-    return shell.project.releaseVersion
-  }
-
-  const previousVersion = shell.recentExports[0]?.versionTag ?? shell.project.releaseVersion
-  const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(previousVersion)
-
-  if (!match) {
-    return previousVersion === 'v0.1.0' ? 'v0.1.1' : `${previousVersion}-next`
-  }
-
-  const major = Number.parseInt(match[1], 10)
-  const minor = Number.parseInt(match[2], 10)
-  const patch = Number.parseInt(match[3], 10)
-  return `v${major}.${minor}.${patch + 1}`
-}
-
-const buildPublishChecklist = (preset: ExportPresetDto, shell: WorkspaceShellDto): string[] => [
-  `当前预设：${preset.title} · ${preset.format.toUpperCase()}`,
-  `卷册范围：${shell.chapterTree[0]?.order ?? 1} - ${shell.chapterTree.at(-1)?.order ?? 1} 章`,
-  `当前项目版本：${shell.project.releaseVersion}${shell.project.lastPublishedAt ? ` · 上次导出 ${formatDateTime(shell.project.lastPublishedAt)}` : ' · 尚未正式导出'}`,
-  '导出策略：始终生成新的版本快照，不覆盖已有导出目录。'
-]
-
-const buildPublishComparisonNotes = (
-  shell: WorkspaceShellDto,
-  input: { versionTag: string; synopsis: string; splitChapters: number; notes: string }
-): string[] => {
-  const latestExport = shell.recentExports[0]
-  const previousVersion = latestExport?.versionTag ?? shell.project.releaseVersion
-  const notes: string[] = []
-
-  if (latestExport) {
-    notes.push(`将从 ${latestExport.versionTag} 继续导出，本次目标版本为 ${input.versionTag}。`)
-    notes.push(
-      latestExport.splitChapters === input.splitChapters
-        ? `平台拆章保持 ${input.splitChapters} 组，不改变上一次节奏切分。`
-        : `平台拆章将从 ${latestExport.splitChapters} 调整为 ${input.splitChapters}，需再次确认连载节奏。`
-    )
-    notes.push(
-      latestExport.synopsis.trim() === input.synopsis.trim()
-        ? '平台简介与上一版保持一致，适合只发布正文修订。'
-        : '平台简介已发生变化，建议在确认前快速核对悬念钩子是否仍然成立。'
-    )
-    if (latestExport.platformFeedback[0]) {
-      notes.push(`上一版主要反馈：${latestExport.platformFeedback[0]}`)
-    }
-  } else {
-    notes.push(`当前会创建首个正式导出版本 ${input.versionTag}。`)
-    notes.push('这是第一次输出，建议先确认简介、拆章和发布备注，再执行导出。')
-  }
-
-  if (input.notes.trim()) {
-    notes.push(`发布备注将写入 release-notes：${input.notes.trim()}`)
-  } else {
-    notes.push(`若不填写备注，会自动写入“${previousVersion} 后的当前导出快照”说明。`)
-  }
-
-  return notes
-}
-
-const summarizePath = (path: string): string => {
-  const normalized = path.replace(/\\/g, '/')
-  const segments = normalized.split('/').filter(Boolean)
-
-  if (segments.length <= 4) {
-    return normalized
-  }
-
-  return `.../${segments.slice(-4).join('/')}`
-}
-
-const formatDateTime = (value: string): string => {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return date.toLocaleString('zh-CN', { hour12: false })
-}
-
-const formatSignedDelta = (value: number, unit = ''): string => {
-  if (value === 0) {
-    return `0${unit}`
-  }
-
-  return `${value > 0 ? '+' : ''}${value}${unit}`
-}
-
-const isPublishSynopsisDraftItem = (item: AgentFeedItemDto): boolean =>
-  item.kind === 'evidence' &&
-  item.title === '平台简介草案已生成' &&
-  item.supportingLabel === '发布参数 / 可直接回填简介'
-
-const isPublishNotesDraftItem = (item: AgentFeedItemDto): boolean =>
-  item.kind === 'evidence' &&
-  item.title === '发布备注草案已生成' &&
-  item.supportingLabel === '发布参数 / 可直接回填备注'
-
-const isPublishConfirmSuggestionItem = (item: AgentFeedItemDto): boolean =>
-  item.kind === 'status' && item.title === '最终确认建议已生成'
-
-const buildExpectedPublishAssets = (preset?: ExportPresetDto): Array<{ label: string; detail: string }> => {
-  const manuscriptFile = preset?.format === 'markdown' ? 'manuscript.md' : 'prepack.md'
-
-  return [
-    {
-      label: manuscriptFile,
-      detail: '正文主包，按当前预设聚合章节内容。'
-    },
-    {
-      label: 'synopsis.md',
-      detail: '平台简介，随版本一起归档。'
-    },
-    {
-      label: 'release-notes.md',
-      detail: '发布备注，记录这一版的确认重点。'
-    },
-    {
-      label: 'platform-feedback.md',
-      detail: '平台反馈与预检提示，便于下次复盘。'
-    },
-    {
-      label: 'manifest.json',
-      detail: '版本、预设、资产路径与反馈清单。'
-    }
-  ]
-}
-
 const buildDefaultCreateProjectForm = (): CreateProjectFormState => ({
   title: '',
   genre: '悬疑 / 都市奇幻',
@@ -449,6 +310,17 @@ const SurfaceIcon = ({ surface }: { surface: NovelSurfaceId }) => {
         <path d="M6.5 6.5h11" {...iconStrokeProps} />
         <path d="M12 6.5v11" {...iconStrokeProps} />
         <path d="M8.75 17.5h6.5" {...iconStrokeProps} />
+      </svg>
+    )
+  }
+
+  if (surface === 'knowledge') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M7 6.5h8.75" {...iconStrokeProps} />
+        <path d="M7 10h10" {...iconStrokeProps} />
+        <path d="M7 13.5h7.25" {...iconStrokeProps} />
+        <path d="M6.75 18.25h10.5" {...iconStrokeProps} />
       </svg>
     )
   }
@@ -712,105 +584,6 @@ const SettingsModal = ({
   </div>
 )
 
-const WorkspaceSearchModal = ({
-  query,
-  results,
-  isSearching,
-  error,
-  onQueryChange,
-  onClose,
-  onSelect
-}: {
-  query: string
-  results: WorkspaceSearchItemDto[]
-  isSearching: boolean
-  error?: string | null
-  onQueryChange: (value: string) => void
-  onClose: () => void
-  onSelect: (item: WorkspaceSearchItemDto) => void
-}) => (
-  <div className="modal-overlay" role="presentation" onClick={onClose}>
-    <div
-      className="modal-card workspace-search-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label="搜索当前小说项目"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="workspace-search-modal__header">
-        <div>
-          <span className="eyebrow">项目搜索</span>
-          <h2>搜索章节、样本、设定与修订</h2>
-          <p>直接搜索当前工作区里的正文、拆书样本、候选设定卡、修订问题和发布预设。</p>
-        </div>
-        <button type="button" className="ghost-button" onClick={onClose}>
-          关闭
-        </button>
-      </div>
-
-      <label className="field-stack workspace-search-modal__field">
-        <span>搜索关键词</span>
-        <input
-          autoFocus
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="例如：钟楼钥匙、视角、第一章、发布简介"
-        />
-      </label>
-
-      <div className="workspace-search-modal__content">
-        {isSearching ? (
-          <div className="empty-state">
-            <strong>正在搜索当前项目...</strong>
-            <span>章节正文、拆书样本、设定卡和修订问题正在本地检索。</span>
-          </div>
-        ) : error ? (
-          <div className="empty-state">
-            <strong>搜索暂时失败</strong>
-            <span>{error}</span>
-          </div>
-        ) : query.trim().length === 0 ? (
-          <div className="surface-grid surface-grid--two workspace-search-modal__tips">
-            <article className="surface-card">
-              <span className="eyebrow">快速入口</span>
-              <h3>从当前工作区直接跳转</h3>
-              <p>可以按章节标题、样本名、设定名、修订问题或导出预设快速回到对应工作面。</p>
-            </article>
-            <article className="surface-card">
-              <span className="eyebrow">搜索范围</span>
-              <h3>正文、设定、修订、发布</h3>
-              <p>搜索会命中章节正文、场景目标、拆书样本、候选设定卡、修订问题和发布预设。</p>
-            </article>
-          </div>
-        ) : results.length > 0 ? (
-          <div className="workspace-search-results">
-            {results.map((item) => (
-              <button
-                key={item.itemId}
-                type="button"
-                className="workspace-search-result"
-                onClick={() => onSelect(item)}
-              >
-                <div className="workspace-search-result__meta">
-                  <span className="workspace-search-result__kind">{searchItemKindLabel[item.kind]}</span>
-                  <span className="workspace-search-result__surface">{resolveWorkspaceSearchSurfaceLabel(item)}</span>
-                </div>
-                <strong>{item.title}</strong>
-                <p>{item.snippet}</p>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <strong>没有找到相关结果</strong>
-            <span>可以换个角色名、章节标题、问题关键词或设定词再试一次。</span>
-          </div>
-        )}
-      </div>
-    </div>
-  </div>
-)
-
 const HomeSurface = ({
   shell,
   activeChapter,
@@ -841,6 +614,7 @@ const HomeSurface = ({
           <p>{shell.project.premise}</p>
           <div className="hero-metrics">
             <span>总字数 {formatCount(totalWords)}</span>
+            <span>知识资产 {shell.knowledgeSummary.totalDocuments}</span>
             <span>拆书样本 {shell.analysisSamples.length}</span>
             <span>候选设定卡 {shell.canonCandidates.length}</span>
             <span>修订问题 {shell.revisionIssues.length}</span>
@@ -864,6 +638,9 @@ const HomeSurface = ({
             </button>
             <button className="ghost-button" onClick={() => onSurfaceChange('canon')}>
               打开候选设定卡
+            </button>
+            <button className="ghost-button" onClick={() => onSurfaceChange('knowledge')}>
+              打开知识工作台
             </button>
           </div>
         </div>
@@ -1605,479 +1382,6 @@ const RevisionSurface = ({
   )
 }
 
-const PublishSurface = ({
-  shell,
-  preset,
-  synopsis,
-  synopsisDraft,
-  notesDraft,
-  confirmSuggestion,
-  versionTag,
-  notes,
-  isExporting,
-  isConfirmOpen,
-  onSynopsisChange,
-  onApplySynopsisDraft,
-  onApplyNotesDraft,
-  onVersionTagChange,
-  onNotesChange,
-  exportSplit,
-  onExportSplitChange,
-  onSelectPreset,
-  onStartTask,
-  onConfirmOpenChange,
-  onCreateExportPackage
-}: {
-  shell: WorkspaceShellDto
-  preset?: ExportPresetDto
-  synopsis: string
-  synopsisDraft?: AgentFeedItemDto
-  notesDraft?: AgentFeedItemDto
-  confirmSuggestion?: AgentFeedItemDto
-  versionTag: string
-  notes: string
-  isExporting: boolean
-  isConfirmOpen: boolean
-  onSynopsisChange: (value: string) => void
-  onApplySynopsisDraft: (value: string) => void
-  onApplyNotesDraft: (value: string) => void
-  onVersionTagChange: (value: string) => void
-  onNotesChange: (value: string) => void
-  exportSplit: string
-  onExportSplitChange: (value: string) => void
-  onSelectPreset: (presetId: string) => void
-  onStartTask: (intent: string) => void
-  onConfirmOpenChange: (open: boolean) => void
-  onCreateExportPackage: (input: CreateExportPackageInputDto) => void
-}) => {
-  const checklist = preset ? buildPublishChecklist(preset, shell) : []
-  const presetTitleById = new Map(shell.exportPresets.map((item) => [item.presetId, item.title]))
-  const splitValue = Number.parseInt(exportSplit, 10) || 3
-  const latestExport = shell.recentExports[0]
-  const latestExportComparison = shell.latestExportComparison
-  const expectedAssets = buildExpectedPublishAssets(preset)
-  const comparisonNotes = buildPublishComparisonNotes(shell, {
-    versionTag: versionTag.trim() || suggestNextPublishVersion(shell),
-    synopsis,
-    splitChapters: splitValue,
-    notes
-  })
-  const canConfirmExport = Boolean(preset && synopsis.trim() && versionTag.trim())
-  const isSynopsisDraftApplied = synopsisDraft?.body.trim() === synopsis.trim()
-  const isNotesDraftApplied = notesDraft?.body.trim() === notes.trim()
-
-  return (
-    <div className="surface-stack">
-      <section className="surface-hero surface-hero--publish">
-        <div className="surface-hero__meta-bar">
-          <span>当前版本：{shell.project.releaseVersion}</span>
-          <span>建议版本：{suggestNextPublishVersion(shell)}</span>
-          <span>{latestExport ? `最近导出：${latestExport.versionTag}` : '最近导出：暂无'}</span>
-        </div>
-        <div className="surface-hero__main">
-          <span className="eyebrow">结果工作面</span>
-          <h1>导出预览与发布准备</h1>
-          <p>发布仍属于小说主流程，因为简介、章节范围、元数据和版本都依赖项目记忆。</p>
-        </div>
-        <div className="hero-actions">
-          {shell.exportPresets.map((item) => (
-            <button
-              key={item.presetId}
-              className={item.presetId === preset?.presetId ? 'pill-button pill-button--active' : 'pill-button'}
-              onClick={() => onSelectPreset(item.presetId)}
-            >
-              {item.title}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <div className="surface-grid surface-grid--two-large">
-        <article className="surface-card surface-card--preview">
-          <div className="surface-card__header">
-            <span className="eyebrow">导出预览</span>
-            <span className="status-chip">{preset ? exportStatusLabel[preset.status] : '等待预设'}</span>
-          </div>
-          <div className="preview-sheet">
-            <div className="preview-sheet__header">
-              <strong>{shell.project.title}</strong>
-              <span>{preset ? `${preset.title} · ${preset.format.toUpperCase()}` : '尚未选择预设'}</span>
-            </div>
-            <h2>{shell.chapterTree[1]?.title ? `第 ${shell.chapterTree[1].order} 章《${shell.chapterTree[1].title}》` : '导出预览'}</h2>
-            <p>{synopsis}</p>
-            <div className="detail-list">
-              <div className="detail-list__item">
-                <strong>导出范围</strong>
-                <span>第 {shell.chapterTree[0]?.order ?? 1} 章 - 第 {shell.chapterTree.at(-1)?.order ?? 1} 章</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>目标版本</strong>
-                <span>{versionTag.trim() || suggestNextPublishVersion(shell)}</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>平台拆分</strong>
-                <span>{splitValue} 个平台章节</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>版本快照</strong>
-                <span>{new Date().toLocaleString('zh-CN', { hour12: false })}</span>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article className="surface-card">
-          <div className="surface-card__header">
-            <span className="eyebrow">发布参数</span>
-            <button
-              className="inline-link"
-              onClick={() => onStartTask('请解释最近两次发布差异，并指出最需要确认的变化。')}
-            >
-              让代理解读差异
-            </button>
-          </div>
-          {synopsisDraft ? (
-            <div className="stacked-note publish-draft-note">
-              <strong>发布代理最新简介草案</strong>
-              <p>{synopsisDraft.body}</p>
-              <div className="hero-actions publish-draft-note__actions">
-                <button
-                  className="primary-button"
-                  disabled={isSynopsisDraftApplied}
-                  onClick={() => onApplySynopsisDraft(synopsisDraft.body)}
-                >
-                  {isSynopsisDraftApplied ? '已采用这版简介' : '采用这版简介'}
-                </button>
-                <button
-                  className="ghost-button"
-                  onClick={() => onStartTask('请再生成一版更像长篇小说连载文案的平台简介。')}
-                >
-                  再生成一版
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {notesDraft ? (
-            <div className="stacked-note publish-draft-note">
-              <strong>发布代理最新备注草案</strong>
-              <p>{notesDraft.body}</p>
-              <div className="hero-actions publish-draft-note__actions">
-                <button
-                  className="primary-button"
-                  disabled={isNotesDraftApplied}
-                  onClick={() => onApplyNotesDraft(notesDraft.body)}
-                >
-                  {isNotesDraftApplied ? '已采用这版备注' : '采用这版备注'}
-                </button>
-                <button
-                  className="ghost-button"
-                  onClick={() => onStartTask('请再生成一版更适合 release-notes 的发布备注，突出这一版的确认重点。')}
-                >
-                  再生成一版
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {confirmSuggestion ? (
-            <div className="stacked-note publish-confirm-note">
-              <strong>发布代理最终确认建议</strong>
-              <p>{confirmSuggestion.body}</p>
-              <div className="hero-actions publish-draft-note__actions">
-                <button className="primary-button" onClick={() => onConfirmOpenChange(true)}>
-                  直接打开确认单
-                </button>
-                <button className="ghost-button" onClick={() => onStartTask('请继续细化当前发布确认单，按风险高低列出复核顺序。')}>
-                  细化确认顺序
-                </button>
-              </div>
-            </div>
-          ) : null}
-          <label className="field-stack">
-            <span>平台简介</span>
-            <textarea value={synopsis} onChange={(event) => onSynopsisChange(event.target.value)} />
-          </label>
-          <label className="field-stack">
-            <span>目标版本号</span>
-            <input
-              value={versionTag}
-              onChange={(event) => onVersionTagChange(event.target.value)}
-              placeholder={suggestNextPublishVersion(shell)}
-            />
-          </label>
-          <label className="field-stack">
-            <span>平台拆分章节数</span>
-            <input value={exportSplit} onChange={(event) => onExportSplitChange(event.target.value)} />
-          </label>
-          <label className="field-stack">
-            <span>发布备注</span>
-            <textarea
-              value={notes}
-              onChange={(event) => onNotesChange(event.target.value)}
-              placeholder="写给未来自己的这版说明，会一起写入 release-notes。"
-            />
-          </label>
-          <div className="stacked-notes">
-            {checklist.map((item) => (
-              <div key={item} className="stacked-note">
-                <p>{item}</p>
-              </div>
-            ))}
-          </div>
-          <div className="hero-actions">
-            <button
-              className="primary-button"
-              disabled={!canConfirmExport}
-              onClick={() => onConfirmOpenChange(!isConfirmOpen)}
-            >
-              {isConfirmOpen ? '收起确认单' : '生成确认单'}
-            </button>
-            <button className="ghost-button" onClick={() => onStartTask('请帮我生成一版平台简介，并保留主线悬念。')}>
-              生成平台简介
-            </button>
-            <button
-              className="ghost-button"
-              onClick={() => onStartTask('请生成一版发布备注，说明这次导出的确认重点与主线推进。')}
-            >
-              生成发布备注
-            </button>
-            <button
-              className="ghost-button"
-              onClick={() => onStartTask('请比较最新版本与当前发布草案的差异，并指出还需要确认的风险。')}
-            >
-              让发布代理做最终复核
-            </button>
-          </div>
-        </article>
-      </div>
-
-      <article className="surface-card">
-        <div className="surface-card__header">
-          <div>
-            <span className="eyebrow">资产检查</span>
-            <h3>平台化资产与最近真实产物</h3>
-          </div>
-          <span className="status-chip status-chip--muted">
-            {latestExport ? `${latestExport.fileCount} 个最近产物` : `${expectedAssets.length} 个待生成产物`}
-          </span>
-        </div>
-        <div className="publish-assets">
-          <div className="publish-assets__panel">
-            <strong>本次确认后将生成</strong>
-            <div className="publish-assets__list">
-              {expectedAssets.map((asset) => (
-                <div key={asset.label} className="publish-asset-item">
-                  <div>
-                    <strong>{asset.label}</strong>
-                    <p>{asset.detail}</p>
-                  </div>
-                  <span>待生成</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="publish-assets__panel">
-            <strong>最近一次真实导出资产</strong>
-            {latestExport ? (
-              <div className="publish-assets__list">
-                {latestExport.files.map((filePath) => (
-                  <div key={filePath} className="publish-asset-item">
-                    <div>
-                      <strong>{filePath.split(/[\\/]/).at(-1) ?? filePath}</strong>
-                      <p title={filePath}>{summarizePath(filePath)}</p>
-                    </div>
-                    <span>已生成</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <strong>还没有真实导出资产</strong>
-                <span>完成首个导出后，这里会列出 manifest 里记录的实际产物清单。</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </article>
-
-      <article className="surface-card">
-        <div className="surface-card__header">
-          <div>
-            <span className="eyebrow">版本比较</span>
-            <h3>最近两次真实导出差异</h3>
-          </div>
-          <span
-            className={`severity-badge severity-badge--${
-              latestExportComparison ? latestExportComparison.riskLevel : 'low'
-            }`}
-          >
-            {latestExportComparison ? riskLevelLabel[latestExportComparison.riskLevel] : '暂无历史'}
-          </span>
-        </div>
-
-        {latestExportComparison ? (
-          <div className="publish-comparison">
-            <div className="publish-comparison__summary">
-              <strong>
-                {latestExportComparison.previousVersionTag} {'->'} {latestExportComparison.currentVersionTag}
-              </strong>
-              <span>
-                {formatDateTime(latestExportComparison.previousGeneratedAt)} {'->'}{' '}
-                {formatDateTime(latestExportComparison.currentGeneratedAt)}
-              </span>
-              <p>{latestExportComparison.summary}</p>
-            </div>
-
-            <div className="publish-comparison__metrics">
-              <div className="publish-comparison__metric">
-                <span>简介变化</span>
-                <strong>{formatSignedDelta(latestExportComparison.synopsisDelta, ' 字')}</strong>
-              </div>
-              <div className="publish-comparison__metric">
-                <span>拆章变化</span>
-                <strong>{formatSignedDelta(latestExportComparison.splitChaptersDelta, ' 组')}</strong>
-              </div>
-              <div className="publish-comparison__metric">
-                <span>资产变化</span>
-                <strong>{formatSignedDelta(latestExportComparison.fileCountDelta, ' 个')}</strong>
-              </div>
-            </div>
-
-            <div className="publish-comparison__grid">
-              <div className="stacked-notes">
-                <div className="stacked-note">
-                  <strong>变更项</strong>
-                  <p>
-                    {latestExportComparison.changedFields.length > 0
-                      ? latestExportComparison.changedFields.join('、')
-                      : '这两版的发布参数保持一致。'}
-                  </p>
-                </div>
-                {latestExportComparison.addedFeedback.map((item) => (
-                  <div key={item} className="stacked-note">
-                    <strong>新增反馈</strong>
-                    <p>{item}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="stacked-notes">
-                {latestExportComparison.removedFeedback.length > 0 ? (
-                  latestExportComparison.removedFeedback.map((item) => (
-                    <div key={item} className="stacked-note">
-                      <strong>已消除反馈</strong>
-                      <p>{item}</p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="stacked-note">
-                    <strong>已消除反馈</strong>
-                    <p>最近两次导出之间没有移除的反馈项，说明当前风险仍需继续关注。</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="empty-state">
-            <strong>还不足以比较版本</strong>
-            <span>至少需要两次真实导出后，这里才会自动生成参数差异与反馈变化。</span>
-          </div>
-        )}
-      </article>
-
-      {isConfirmOpen ? (
-        <article className="surface-card">
-          <div className="surface-card__header">
-            <div>
-              <span className="eyebrow">最终确认</span>
-              <h3>作者确认后再执行导出</h3>
-            </div>
-            <span className="status-chip">{versionTag.trim() || suggestNextPublishVersion(shell)}</span>
-          </div>
-          <div className="surface-grid surface-grid--two">
-            <div className="detail-list">
-              <div className="detail-list__item">
-                <strong>版本回写</strong>
-                <span>
-                  这次会把 {versionTag.trim() || suggestNextPublishVersion(shell)} 与导出时间回写到项目配置中。
-                </span>
-              </div>
-              <div className="detail-list__item">
-                <strong>输出资产</strong>
-                <span>会生成正文包、简介、发布备注、平台反馈与 manifest，不覆盖已有目录。</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>上一个版本</strong>
-                <span>{latestExport ? `${latestExport.versionTag} · ${formatDateTime(latestExport.generatedAt)}` : '暂无历史版本'}</span>
-              </div>
-            </div>
-            <div className="stacked-notes">
-              {comparisonNotes.map((item) => (
-                <div key={item} className="stacked-note">
-                  <p>{item}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="hero-actions">
-            <button
-              className="primary-button"
-              disabled={!preset || !synopsis.trim() || !versionTag.trim() || isExporting}
-              onClick={() =>
-                preset &&
-                onCreateExportPackage({
-                  presetId: preset.presetId,
-                  synopsis,
-                  splitChapters: splitValue,
-                  versionTag: versionTag.trim(),
-                  notes
-                })
-              }
-            >
-              {isExporting ? '正在导出...' : '确认并导出'}
-            </button>
-            <button className="ghost-button" onClick={() => onConfirmOpenChange(false)}>
-              继续调整参数
-            </button>
-          </div>
-        </article>
-      ) : null}
-
-      <article className="surface-card">
-        <div className="surface-card__header">
-          <span className="eyebrow">最近导出</span>
-          <span className="status-chip status-chip--muted">{shell.recentExports.length} 次输出</span>
-        </div>
-        {shell.recentExports.length > 0 ? (
-          <div className="export-history-list">
-            {shell.recentExports.map((item) => (
-              <div key={item.exportId} className="export-history-item">
-                <div className="export-history-item__header">
-                  <strong>
-                    {item.versionTag} · {presetTitleById.get(item.presetId) ?? item.presetId}
-                  </strong>
-                  <span>{formatDateTime(item.generatedAt)}</span>
-                </div>
-                <p>{item.platformFeedback[0] ?? '该版本未记录平台反馈摘要。'}</p>
-                <p>
-                  简介长度 {item.synopsis.trim().length} 字 · 拆章 {item.splitChapters} 组 · 产物 {item.fileCount} 个
-                </p>
-                <p title={item.outputDir}>导出目录：{summarizePath(item.outputDir)}</p>
-                <p title={item.manifestPath}>清单文件：{summarizePath(item.manifestPath)}</p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <strong>还没有导出记录</strong>
-            <span>生成第一版导出包后，这里会回流最近产物，便于继续比较版本差异。</span>
-          </div>
-        )}
-      </article>
-    </div>
-  )
-}
-
 const HomeStructurePanel = ({
   shell,
   activeChapter,
@@ -2120,7 +1424,9 @@ const HomeStructurePanel = ({
       <span className="eyebrow">系列</span>
       <div className="panel-note">
         <strong>{shell.chapterTree[0]?.volumeLabel ?? '主线项目'}</strong>
-        <span>{shell.chapterTree.length} 章 / {shell.canonCandidates.length} 张设定卡 / 持续共享角色状态</span>
+        <span>
+          {shell.chapterTree.length} 章 / {shell.canonCandidates.length} 张设定卡 / {shell.knowledgeSummary.totalDocuments} 份知识资产
+        </span>
       </div>
     </div>
 
@@ -2133,6 +1439,10 @@ const HomeStructurePanel = ({
       <button className="panel-list-button" onClick={() => onSurfaceChange('canon')}>
         <strong>设定代理</strong>
         <span>新增 {shell.canonCandidates.length} 张候选卡</span>
+      </button>
+      <button className="panel-list-button" onClick={() => onSurfaceChange('knowledge')}>
+        <strong>知识工作台</strong>
+        <span>当前有 {shell.knowledgeSummary.totalDocuments} 份知识资产可继续提问</span>
       </button>
       <button className="panel-list-button" onClick={() => onSurfaceChange('revision')}>
         <strong>修订代理</strong>
@@ -2284,52 +1594,6 @@ const RevisionStructurePanel = ({
       <div className="panel-note">
         <strong>来源</strong>
         <span>自动诊断 / 手动标记 / 反馈导入</span>
-      </div>
-    </div>
-  </div>
-)
-
-const PublishStructurePanel = ({
-  shell,
-  selectedPresetId,
-  onSelectPreset
-}: {
-  shell: WorkspaceShellDto
-  selectedPresetId?: string
-  onSelectPreset: (presetId: string) => void
-}) => (
-  <div className="structure-panel__content">
-    <div className="structure-panel__section">
-      <span className="eyebrow">发布结构</span>
-      {shell.exportPresets.map((preset) => (
-        <button
-          key={preset.presetId}
-          className={preset.presetId === selectedPresetId ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
-          onClick={() => onSelectPreset(preset.presetId)}
-        >
-          <strong>{preset.title}</strong>
-          <span>{preset.summary}</span>
-        </button>
-      ))}
-    </div>
-
-    <div className="structure-panel__section">
-      <span className="eyebrow">本次范围</span>
-      <div className="panel-note">
-        <strong>{shell.chapterTree[0]?.volumeLabel ?? '当前卷册'}</strong>
-        <span>第 {shell.chapterTree[0]?.order ?? 1} 章 - 第 {shell.chapterTree.at(-1)?.order ?? 1} 章</span>
-      </div>
-      <div className="panel-note">
-        <strong>版本</strong>
-        <span>{new Date().toLocaleString('zh-CN', { hour12: false })}</span>
-      </div>
-      <div className="panel-note">
-        <strong>最近资产</strong>
-        <span>
-          {shell.recentExports[0]
-            ? `${shell.recentExports[0].fileCount} 个产物 · ${shell.recentExports[0].versionTag}`
-            : '等待首次正式导出'}
-        </span>
       </div>
     </div>
   </div>
@@ -2722,6 +1986,7 @@ export const NovelWorkbench = ({
   isImportingAnalysisSample,
   isApplyingAnalysisStrategy,
   isCreatingExportPackage,
+  isGeneratingKnowledgeAnswer,
   onSurfaceChange,
   onFeatureToolChange,
   onCreateProject,
@@ -2738,7 +2003,8 @@ export const NovelWorkbench = ({
   onCommitCanonCard,
   onUpdateRevisionIssue,
   onUndoRevisionRecord,
-  onCreateExportPackage
+  onCreateExportPackage,
+  onCreateKnowledgeAnswer
 }: NovelWorkbenchProps) => {
   const activeChapterId = currentChapterId ?? chapterDocument?.chapterId ?? shell.project.currentChapterId
   const activeChapter =
@@ -2750,25 +2016,14 @@ export const NovelWorkbench = ({
   const [selectedCanonCategory, setSelectedCanonCategory] = useState<CanonCategoryId>('all')
   const [selectedCanonCardId, setSelectedCanonCardId] = useState(shell.canonCandidates[0]?.cardId)
   const [selectedIssueId, setSelectedIssueId] = useState(shell.revisionIssues[0]?.issueId)
-  const [selectedPresetId, setSelectedPresetId] = useState(shell.exportPresets[0]?.presetId)
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false)
   const [isCreateProjectModalOpen, setCreateProjectModalOpen] = useState(false)
-  const [isSearchModalOpen, setSearchModalOpen] = useState(false)
   const [isFocusMode, setFocusMode] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<WorkspaceSearchItemDto[]>([])
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [isSearching, setSearching] = useState(false)
   const [createProjectForm, setCreateProjectForm] = useState<CreateProjectFormState>(buildDefaultCreateProjectForm)
-  const [isPublishConfirmOpen, setPublishConfirmOpen] = useState(false)
-  const [publishSynopsis, setPublishSynopsis] = useState(
-    `《${shell.project.title}》聚焦林清远在钟楼与旧雨季之间追索父亲失踪真相的过程，保留悬疑与都市奇幻的双重张力。`
-  )
-  const [exportSplit, setExportSplit] = useState('3')
-  const [publishVersionTag, setPublishVersionTag] = useState(suggestNextPublishVersion(shell))
-  const [publishNotes, setPublishNotes] = useState('')
-  const searchRequestIdRef = useRef(0)
   const isAnalysisToolActive = activeSurface === 'feature-center' && activeFeatureTool === 'analysis'
+  const knowledge = useKnowledgeWorkbenchState(shell)
+  const publish = usePublishWorkbenchState(shell, feedState.feed)
+  const workspaceSearch = useWorkspaceSearch(shell.workspacePath)
 
   useEffect(() => {
     if (!shell.sceneList.some((scene) => scene.sceneId === selectedSceneId)) {
@@ -2795,31 +2050,6 @@ export const NovelWorkbench = ({
   }, [selectedIssueId, shell.revisionIssues])
 
   useEffect(() => {
-    if (!shell.exportPresets.some((preset) => preset.presetId === selectedPresetId)) {
-      setSelectedPresetId(shell.exportPresets[0]?.presetId)
-    }
-  }, [selectedPresetId, shell.exportPresets])
-
-  useEffect(() => {
-    setPublishSynopsis(
-      `《${shell.project.title}》聚焦林清远在钟楼与旧雨季之间追索父亲失踪真相的过程，保留悬疑与都市奇幻的双重张力。`
-    )
-  }, [shell.project.title, shell.workspacePath])
-
-  useEffect(() => {
-    setPublishVersionTag(suggestNextPublishVersion(shell))
-    setPublishNotes(
-      shell.recentExports[0]
-        ? `延续 ${shell.recentExports[0].versionTag} 之后的当前发布快照，重点确认最新正文与简介差异。`
-        : `首个正式导出版本，准备围绕《${shell.project.title}》建立发布基线。`
-    )
-  }, [shell.project.title, shell.workspacePath, shell.recentExports[0]?.exportId])
-
-  useEffect(() => {
-    setPublishConfirmOpen(false)
-  }, [shell.workspacePath, shell.recentExports[0]?.exportId])
-
-  useEffect(() => {
     if (!isCreatingProject) {
       setCreateProjectModalOpen(false)
       setCreateProjectForm(buildDefaultCreateProjectForm())
@@ -2834,21 +2064,8 @@ export const NovelWorkbench = ({
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setSearchModalOpen(true)
-        return
-      }
-
-      if (event.key === 'Escape') {
-        if (isSearchModalOpen) {
-          setSearchModalOpen(false)
-          return
-        }
-
-        if (isFocusMode) {
-          setFocusMode(false)
-        }
+      if (event.key === 'Escape' && !workspaceSearch.isOpen && isFocusMode) {
+        setFocusMode(false)
       }
     }
 
@@ -2857,62 +2074,7 @@ export const NovelWorkbench = ({
     return () => {
       window.removeEventListener('keydown', handleKeydown)
     }
-  }, [isFocusMode, isSearchModalOpen])
-
-  useEffect(() => {
-    if (!isSearchModalOpen) {
-      setSearchQuery('')
-      setSearchResults([])
-      setSearchError(null)
-      setSearching(false)
-      return
-    }
-
-    const nextQuery = searchQuery.trim()
-
-    if (!nextQuery) {
-      setSearchResults([])
-      setSearchError(null)
-      setSearching(false)
-      return
-    }
-
-    const requestId = searchRequestIdRef.current + 1
-    searchRequestIdRef.current = requestId
-    const timer = window.setTimeout(() => {
-      setSearching(true)
-      void desktopApi.workspace
-        .searchWorkspace({
-          query: nextQuery,
-          limit: 16
-        })
-        .then((result) => {
-          if (searchRequestIdRef.current !== requestId) {
-            return
-          }
-
-          setSearchResults(result.items)
-          setSearchError(null)
-        })
-        .catch((error) => {
-          if (searchRequestIdRef.current !== requestId) {
-            return
-          }
-
-          setSearchResults([])
-          setSearchError(error instanceof Error ? error.message : '当前工作区暂时无法完成搜索。')
-        })
-        .finally(() => {
-          if (searchRequestIdRef.current === requestId) {
-            setSearching(false)
-          }
-        })
-    }, 180)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [isSearchModalOpen, searchQuery, shell.workspacePath])
+  }, [isFocusMode, workspaceSearch.isOpen])
 
   const selectedIssue =
     shell.revisionIssues.find((issue) => issue.issueId === selectedIssueId) ?? shell.revisionIssues[0]
@@ -2932,11 +2094,6 @@ export const NovelWorkbench = ({
         Boolean(item.proposalId) &&
         item.approvalStatus === 'pending'
     )
-  const latestPublishSynopsisDraft = feedState.feed.find(isPublishSynopsisDraftItem)
-  const latestPublishNotesDraft = feedState.feed.find(isPublishNotesDraftItem)
-  const latestPublishConfirmSuggestion = feedState.feed.find(isPublishConfirmSuggestionItem)
-  const selectedPreset =
-    shell.exportPresets.find((preset) => preset.presetId === selectedPresetId) ?? shell.exportPresets[0]
   const chapterStatusSummary = (() => {
     if (isAnalysisToolActive) {
       return `拆书 · ${shell.analysisSamples.length} 个样本`
@@ -2946,13 +2103,20 @@ export const NovelWorkbench = ({
       return activeFeatureTool ? featureToolLabel[activeFeatureTool] : '功能中心'
     }
 
+    if (activeSurface === 'knowledge') {
+      return knowledge.selectedDocumentMetadata
+        ? `${knowledge.selectedDocumentMetadata.title} · ${knowledgeBucketLabel[knowledge.selectedDocumentMetadata.bucket]}`
+        : `知识工作台 · ${shell.knowledgeSummary.totalDocuments} 份文档`
+    }
+
     if (activeChapter) {
       return `第 ${activeChapter.order} 章 · ${activeChapter.title}`
     }
 
     return '未选择章节'
   })()
-  const statusBarContextLabel = activeSurface === 'feature-center' ? '当前功能' : '当前章节'
+  const statusBarContextLabel =
+    activeSurface === 'feature-center' ? '当前功能' : activeSurface === 'knowledge' ? '当前知识页' : '当前章节'
   const visibleQuickActions: QuickActionDto[] =
     isAnalysisToolActive && selectedAnalysisSample
       ? [
@@ -2967,6 +2131,19 @@ export const NovelWorkbench = ({
             prompt: `请基于样本《${selectedAnalysisSample.title}》为《${shell.project.title}》生成一版立项启发。`
           }
         ]
+      : activeSurface === 'knowledge'
+        ? [
+            {
+              id: 'knowledge-quick-gap',
+              label: '检查知识缺口',
+              prompt: '请基于当前知识工作面，指出最值得补充的事实缺口与冲突页。'
+            },
+            {
+              id: 'knowledge-quick-query',
+              label: '继续知识问答',
+              prompt: '请围绕当前项目已有知识资产，继续整理最重要的信息差与未决问题。'
+            }
+          ]
       : shell.quickActions
   const shellClass = [
     'novel-shell',
@@ -2991,21 +2168,21 @@ export const NovelWorkbench = ({
 
   const handleApplyPublishSynopsisDraft = (value: string): void => {
     ensurePublishSurface()
-    setPublishSynopsis(value)
+    publish.onApplySynopsisDraft(value)
   }
 
   const handleApplyPublishNotesDraft = (value: string): void => {
     ensurePublishSurface()
-    setPublishNotes(value)
+    publish.onApplyNotesDraft(value)
   }
 
   const handleOpenPublishConfirm = (): void => {
     ensurePublishSurface()
-    setPublishConfirmOpen(true)
+    publish.onOpenConfirm()
   }
 
   const handleSearchSelect = (item: WorkspaceSearchItemDto): void => {
-    setSearchModalOpen(false)
+    workspaceSearch.close()
 
     if (item.surface === 'home') {
       onSurfaceChange('home')
@@ -3055,6 +2232,14 @@ export const NovelWorkbench = ({
       return
     }
 
+    if (item.surface === 'knowledge') {
+      onSurfaceChange('knowledge')
+      if (item.entityId) {
+        knowledge.onSelectDocument(item.entityId)
+      }
+      return
+    }
+
     if (item.surface === 'revision') {
       if (item.entityId) {
         setSelectedIssueId(item.entityId)
@@ -3070,7 +2255,7 @@ export const NovelWorkbench = ({
 
     onSurfaceChange('publish')
     if (item.entityId) {
-      setSelectedPresetId(item.entityId)
+      publish.onSelectPreset(item.entityId)
     }
   }
 
@@ -3098,12 +2283,12 @@ export const NovelWorkbench = ({
           <button
             type="button"
             className="command-trigger"
-            onClick={() => setSearchModalOpen(true)}
+            onClick={workspaceSearch.open}
             aria-haspopup="dialog"
-            aria-expanded={isSearchModalOpen}
+            aria-expanded={workspaceSearch.isOpen}
             title="搜索当前项目"
           >
-            <span className="command-trigger__label">搜索章节 / 功能 / 设定 / 修订</span>
+            <span className="command-trigger__label">搜索章节 / 知识 / 设定 / 修订</span>
             <span className="command-trigger__hint">⌘K</span>
           </button>
 
@@ -3186,6 +2371,16 @@ export const NovelWorkbench = ({
               onStartTask={onStartTask}
             />
           ) : null}
+          {activeSurface === 'knowledge' ? (
+            <KnowledgeStructurePanel
+              shell={shell}
+              selectedBucket={knowledge.selectedBucket}
+              selectedDocumentPath={knowledge.selectedDocumentPath}
+              visibleDocuments={knowledge.visibleDocuments}
+              onBucketChange={knowledge.onBucketChange}
+              onSelectDocument={knowledge.onSelectDocument}
+            />
+          ) : null}
           {activeSurface === 'feature-center' && !activeFeatureTool ? (
             <FeatureCenterStructurePanel
               shell={shell}
@@ -3222,8 +2417,8 @@ export const NovelWorkbench = ({
           {activeSurface === 'publish' ? (
             <PublishStructurePanel
               shell={shell}
-              selectedPresetId={selectedPreset?.presetId}
-              onSelectPreset={setSelectedPresetId}
+              selectedPresetId={publish.selectedPresetId}
+              onSelectPreset={publish.onSelectPreset}
             />
           ) : null}
           </aside>
@@ -3249,6 +2444,23 @@ export const NovelWorkbench = ({
               onSelectScene={setSelectedSceneId}
               onStartTask={onStartTask}
               onSaveChapter={onSaveChapter}
+            />
+          ) : null}
+          {activeSurface === 'knowledge' ? (
+            <KnowledgeSurface
+              shell={shell}
+              visibleDocuments={knowledge.visibleDocuments}
+              selectedBucket={knowledge.selectedBucket}
+              onBucketChange={knowledge.onBucketChange}
+              selectedDocumentPath={knowledge.selectedDocumentPath}
+              selectedDocumentMetadata={knowledge.selectedDocumentMetadata}
+              selectedDocument={knowledge.selectedDocument}
+              isDocumentLoading={knowledge.isKnowledgeDocumentLoading}
+              documentError={knowledge.knowledgeDocumentError}
+              onSelectDocument={knowledge.onSelectDocument}
+              onStartTask={onStartTask}
+              onCreateKnowledgeAnswer={onCreateKnowledgeAnswer}
+              isGeneratingAnswer={isGeneratingKnowledgeAnswer}
             />
           ) : null}
           {activeSurface === 'feature-center' && !activeFeatureTool ? (
@@ -3294,25 +2506,9 @@ export const NovelWorkbench = ({
           {activeSurface === 'publish' ? (
             <PublishSurface
               shell={shell}
-              preset={selectedPreset}
-              synopsis={publishSynopsis}
-              synopsisDraft={latestPublishSynopsisDraft}
-              notesDraft={latestPublishNotesDraft}
-              confirmSuggestion={latestPublishConfirmSuggestion}
-              versionTag={publishVersionTag}
-              notes={publishNotes}
+              publish={publish}
               isExporting={isCreatingExportPackage}
-              isConfirmOpen={isPublishConfirmOpen}
-              onSynopsisChange={setPublishSynopsis}
-              onApplySynopsisDraft={handleApplyPublishSynopsisDraft}
-              onApplyNotesDraft={handleApplyPublishNotesDraft}
-              onVersionTagChange={setPublishVersionTag}
-              onNotesChange={setPublishNotes}
-              exportSplit={exportSplit}
-              onExportSplitChange={setExportSplit}
-              onSelectPreset={setSelectedPresetId}
               onStartTask={onStartTask}
-              onConfirmOpenChange={setPublishConfirmOpen}
               onCreateExportPackage={onCreateExportPackage}
             />
           ) : null}
@@ -3326,6 +2522,7 @@ export const NovelWorkbench = ({
             header={feedState.header}
             tasks={feedState.tasks}
             feed={feedState.feed}
+            diagnosticsByTaskId={feedState.diagnosticsByTaskId}
             quickActions={visibleQuickActions}
             onStartTask={onStartTask}
             onApplyProposal={onApplyProposal}
@@ -3382,15 +2579,16 @@ export const NovelWorkbench = ({
         />
       ) : null}
 
-      {isSearchModalOpen ? (
+      {workspaceSearch.isOpen ? (
         <WorkspaceSearchModal
-          query={searchQuery}
-          results={searchResults}
-          isSearching={isSearching}
-          error={searchError}
-          onQueryChange={setSearchQuery}
-          onClose={() => setSearchModalOpen(false)}
+          query={workspaceSearch.query}
+          results={workspaceSearch.results}
+          isSearching={workspaceSearch.isSearching}
+          error={workspaceSearch.error}
+          onQueryChange={workspaceSearch.setQuery}
+          onClose={workspaceSearch.close}
           onSelect={handleSearchSelect}
+          resolveSurfaceLabel={resolveWorkspaceSearchSurfaceLabel}
         />
       ) : null}
     </div>

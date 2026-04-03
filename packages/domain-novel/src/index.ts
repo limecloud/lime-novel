@@ -1,6 +1,14 @@
-export type NovelSurfaceId = 'home' | 'writing' | 'feature-center' | 'analysis' | 'canon' | 'revision' | 'publish'
+export type NovelSurfaceId =
+  | 'home'
+  | 'writing'
+  | 'knowledge'
+  | 'feature-center'
+  | 'analysis'
+  | 'canon'
+  | 'revision'
+  | 'publish'
 
-export type NovelAgentType = 'project' | 'chapter' | 'analysis' | 'canon' | 'revision' | 'publish'
+export type NovelAgentType = 'project' | 'chapter' | 'knowledge' | 'analysis' | 'canon' | 'revision' | 'publish'
 
 export type FeatureToolId = 'analysis'
 

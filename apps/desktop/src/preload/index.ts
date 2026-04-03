@@ -10,6 +10,10 @@ const api: DesktopApiContract = {
     createProject: (input) => ipcRenderer.invoke(CHANNELS.workspace.createProject, input),
     openProjectDialog: () => ipcRenderer.invoke(CHANNELS.workspace.openProjectDialog)
   },
+  knowledge: {
+    loadDocument: (relativePath: string) => ipcRenderer.invoke(CHANNELS.knowledge.loadDocument, relativePath),
+    generateAnswer: (input) => ipcRenderer.invoke(CHANNELS.knowledge.generateAnswer, input)
+  },
   chapter: {
     loadDocument: (chapterId: string) => ipcRenderer.invoke(CHANNELS.chapter.loadDocument, chapterId),
     saveDocument: (input) => ipcRenderer.invoke(CHANNELS.chapter.saveDocument, input),
@@ -32,6 +36,7 @@ const api: DesktopApiContract = {
   },
   agent: {
     startTask: (input) => ipcRenderer.invoke(CHANNELS.agent.startTask, input),
+    loadTaskDiagnostics: () => ipcRenderer.invoke(CHANNELS.agent.loadTaskDiagnostics),
     subscribeTaskEvents: (callback: (event: TaskEventDto) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: TaskEventDto) => {
         callback(payload)

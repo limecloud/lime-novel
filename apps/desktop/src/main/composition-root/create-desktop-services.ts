@@ -6,7 +6,9 @@ import {
   createCommitCanonCardUseCase,
   createCreateProjectWorkspaceUseCase,
   createCreateExportPackageUseCase,
+  createGenerateKnowledgeAnswerUseCase,
   createImportAnalysisSampleUseCase,
+  createLoadKnowledgeDocumentUseCase,
   createLoadChapterDocumentUseCase,
   createLoadWorkspaceShellUseCase,
   createRejectProposalUseCase,
@@ -45,6 +47,9 @@ export const createDesktopServices = async () => {
     loadWorkspaceShell: () => createLoadWorkspaceShellUseCase(repository)(),
     searchWorkspace: (input: Parameters<ReturnType<typeof createSearchWorkspaceUseCase>>[0]) =>
       createSearchWorkspaceUseCase(repository)(input),
+    loadKnowledgeDocument: (relativePath: string) => createLoadKnowledgeDocumentUseCase(repository)(relativePath),
+    generateKnowledgeAnswer: (input: Parameters<ReturnType<typeof createGenerateKnowledgeAnswerUseCase>>[0]) =>
+      createGenerateKnowledgeAnswerUseCase(repository)(input),
     updateWorkspaceContext: (input: Parameters<ReturnType<typeof createUpdateWorkspaceContextUseCase>>[0]) =>
       createUpdateWorkspaceContextUseCase(repository)(input),
     createProject: async (input: Parameters<ReturnType<typeof createCreateProjectWorkspaceUseCase>>[0]) => {
@@ -116,7 +121,8 @@ export const createDesktopServices = async () => {
     undoRevisionRecord: (recordId: string) => createUndoRevisionRecordUseCase(repository)(recordId),
     createExportPackage: (input: Parameters<ReturnType<typeof createCreateExportPackageUseCase>>[0]) =>
       createCreateExportPackageUseCase(repository)(input),
-    startAgentTask: (input: Parameters<typeof agentRuntime.startTask>[0]) => agentRuntime.startTask(input)
+    startAgentTask: (input: Parameters<typeof agentRuntime.startTask>[0]) => agentRuntime.startTask(input),
+    loadAgentTaskDiagnostics: () => agentRuntime.loadTaskDiagnostics()
   }
 }
 

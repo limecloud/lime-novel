@@ -536,6 +536,11 @@ input {
   color: #cb4f9d;
 }
 
+.nav-button[data-surface='knowledge'] .nav-button__glyph {
+  background: #f3efe1;
+  color: #8c6f36;
+}
+
 .nav-button[data-surface='feature-center'] .nav-button__glyph {
   background: #eef3de;
   color: #5d7b35;
@@ -953,6 +958,13 @@ input {
     linear-gradient(180deg, #f6f1e8 0%, var(--paper) 100%);
 }
 
+.surface-hero--knowledge {
+  background:
+    radial-gradient(circle at top right, rgba(193, 132, 63, 0.12), transparent 34%),
+    radial-gradient(circle at left bottom, rgba(104, 131, 154, 0.12), transparent 28%),
+    linear-gradient(180deg, #f8f2e8 0%, var(--paper) 100%);
+}
+
 .surface-hero--feature-center {
   background:
     radial-gradient(circle at top right, rgba(127, 153, 78, 0.16), transparent 34%),
@@ -1039,6 +1051,40 @@ input {
 
 .analysis-signal-list__item--warning strong {
   color: #b86437;
+}
+
+.knowledge-document,
+.knowledge-document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.knowledge-document__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.knowledge-document__body p {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--paper-soft);
+  color: var(--muted);
+  line-height: 1.72;
+  white-space: pre-wrap;
+}
+
+.knowledge-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.knowledge-output-card {
+  width: 100%;
 }
 
 .feature-tool-card {
@@ -2542,6 +2588,82 @@ input {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.agent-runtime-card {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(246, 251, 247, 0.96) 0%, rgba(255, 253, 249, 0.98) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-runtime-card__meta,
+.agent-tool-event {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agent-runtime-card__meta strong,
+.agent-tool-event__copy strong {
+  color: var(--ink);
+  font-size: var(--type-body-lg);
+}
+
+.agent-runtime-card__meta p,
+.agent-tool-event__copy p,
+.agent-runtime-card__failure p {
+  margin: 3px 0 0;
+  color: #625c51;
+  font-size: var(--type-body-sm);
+  line-height: 1.5;
+}
+
+.agent-runtime-card__time {
+  color: #7b7265;
+  font-size: var(--type-body-sm);
+  white-space: nowrap;
+}
+
+.agent-runtime-card__failure {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(168, 91, 76, 0.18);
+  background: rgba(255, 244, 240, 0.9);
+}
+
+.agent-runtime-card__failure strong {
+  color: var(--red);
+  font-size: var(--type-body-sm);
+}
+
+.agent-tool-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-tool-event {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 252, 245, 0.86);
+  border: 1px solid rgba(210, 202, 186, 0.7);
+}
+
+.agent-tool-event__copy {
+  min-width: 0;
+}
+
+.agent-tool-event__error {
+  color: var(--red);
+}
+
+.agent-tool-event__status {
+  margin-left: auto;
 }
 
 .agent-summary-card__meta {

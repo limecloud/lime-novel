@@ -6,6 +6,10 @@ export const CHANNELS = {
     createProject: 'workspace:create-project',
     openProjectDialog: 'workspace:open-project-dialog'
   },
+  knowledge: {
+    loadDocument: 'knowledge:load-document',
+    generateAnswer: 'knowledge:generate-answer'
+  },
   chapter: {
     loadDocument: 'chapter:load-document',
     saveDocument: 'chapter:save-document',
@@ -28,6 +32,7 @@ export const CHANNELS = {
   },
   agent: {
     startTask: 'agent:start-task',
+    loadTaskDiagnostics: 'agent:load-task-diagnostics',
     taskEvent: 'agent:task-event'
   }
 } as const

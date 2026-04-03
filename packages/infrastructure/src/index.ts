@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises'
-import { basename, extname, join, resolve } from 'node:path'
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { basename, extname, join, relative, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { SQLInputValue } from 'node:sqlite'
 import type {
@@ -24,8 +24,13 @@ import type {
   CreateExportPackageResultDto,
   ExportHistoryDto,
   ExportPresetDto,
+  GenerateKnowledgeAnswerInputDto,
+  GenerateKnowledgeAnswerResultDto,
   ImportAnalysisSampleInputDto,
   ImportAnalysisSampleResultDto,
+  KnowledgeDocumentDetailDto,
+  KnowledgeDocumentDto,
+  KnowledgeSummaryDto,
   ProjectRepositoryPort,
   QuickActionDto,
   RejectProposalResultDto,
@@ -43,6 +48,17 @@ import type {
 } from '@lime-novel/application'
 import { clamp, createId } from '@lime-novel/shared-kernel'
 import type { FeatureToolId, NovelSurfaceId, RiskLevel, TaskStatus } from '@lime-novel/domain-novel'
+import {
+  buildKnowledgeAnswerContent,
+  buildKnowledgeSummary,
+  compareKnowledgeUpdatedAt,
+  createKnowledgeDocumentId,
+  createKnowledgeExcerpt,
+  loadKnowledgeDocuments,
+  readKnowledgeDocumentDetail,
+  syncKnowledgeScaffoldFiles,
+  toKnowledgeMetadata
+} from './knowledge'
 
 type ChapterSceneConfig = {
   sceneId: string
@@ -239,6 +255,7 @@ type RuntimeSeed = {
 const NAVIGATION = [
   { id: 'home', label: '首页', description: '恢复现场与项目健康度' },
   { id: 'writing', label: '写作', description: '章节树、场景与正文编辑' },
+  { id: 'knowledge', label: '知识', description: '知识页、证据与问答产物' },
   { id: 'canon', label: '设定', description: '候选卡、关系与时间线' },
   { id: 'revision', label: '修订', description: '问题队列、证据与差异' },
   { id: 'publish', label: '发布', description: '导出预设与平台准备' }
@@ -264,6 +281,16 @@ const buildWorkspaceAgentHeader = (
       activeSubAgent: '事实抽取子代理',
       surface,
       memorySources: ['候选设定', '证据片段', '章节引用', '最近任务'],
+      riskLevel: 'medium'
+    }
+  }
+
+  if (surface === 'knowledge') {
+    return {
+      currentAgent: '知识代理',
+      activeSubAgent: '知识编译子代理',
+      surface,
+      memorySources: ['raw 素材', 'compiled 知识页', 'canon 设定', 'outputs 查询产物'],
       riskLevel: 'medium'
     }
   }
@@ -769,6 +796,12 @@ const suggestNextVersionTag = (previousVersionTag?: string): string => {
 const countNarrativeChars = (content: string): number => content.replace(/\s+/g, '').length
 
 const normalizeNarrativeContent = (content: string): string => `${content.trimEnd()}\n`
+
+const extractBodyParagraphs = (content: string): string[] =>
+  normalizeNarrativeContent(content)
+    .split(/\n{2,}/)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0 && !segment.startsWith('#'))
 
 const sanitizeFileSegment = (value: string): string => {
   const normalized = value
@@ -1761,6 +1794,13 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
 
   async loadWorkspaceShell(): Promise<WorkspaceShellDto> {
     const config = await this.loadConfig()
+    const knowledgeDetails = await loadKnowledgeDocuments(this.workspaceRoot)
+    const knowledgeDocuments = knowledgeDetails.map((document) => toKnowledgeMetadata(document))
+    const knowledgeSummary = buildKnowledgeSummary(knowledgeDocuments)
+    const knowledgeRecentOutputs = knowledgeDocuments
+      .filter((document) => document.bucket === 'output')
+      .sort((left, right) => compareKnowledgeUpdatedAt(left.updatedAt, right.updatedAt))
+      .slice(0, 6)
     const recentExports = await loadExportHistory(this.workspaceRoot)
     const latestExportComparison = buildLatestExportComparison(recentExports)
     const analysisSamples = (
@@ -1857,6 +1897,9 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
         status: scene.status
       })),
       homeHighlights: config.homeHighlights,
+      knowledgeSummary,
+      knowledgeDocuments,
+      knowledgeRecentOutputs,
       analysisOverview: buildAnalysisOverview(analysisSamples),
       analysisSamples,
       canonCandidates: this.database
@@ -2129,9 +2172,97 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
       })
     }
 
+    const knowledgeDocuments = await loadKnowledgeDocuments(this.workspaceRoot)
+
+    for (const document of knowledgeDocuments) {
+      const documentScore =
+        scoreSearchField(document.title, query, 110) +
+        scoreSearchField(document.summary, query, 78) +
+        scoreSearchField(document.excerpt, query, 86) +
+        scoreSearchField(document.type, query, 28) +
+        scoreSearchField(document.sources.join(' '), query, 32) +
+        scoreSearchField(document.related.join(' '), query, 28)
+
+      pushItem({
+        itemId: `${document.kind}-${document.documentId}`,
+        kind: document.bucket === 'output' ? 'knowledge-output' : 'knowledge-document',
+        title: document.title,
+        snippet: createSearchExcerpt(`${document.summary} ${document.excerpt}`, query, 96),
+        surface: 'knowledge',
+        entityId: document.relativePath,
+        score: documentScore
+      })
+    }
+
     return {
       query,
       items: items.sort((left, right) => right.score - left.score).slice(0, limit)
+    }
+  }
+
+  async loadKnowledgeDocument(relativePath: string): Promise<KnowledgeDocumentDetailDto> {
+    const normalizedPath = relativePath.replace(/^\/+/, '')
+
+    if (!normalizedPath) {
+      throw new Error('知识页路径不能为空。')
+    }
+
+    return readKnowledgeDocumentDetail(this.workspaceRoot, normalizedPath)
+  }
+
+  async generateKnowledgeAnswer(
+    input: GenerateKnowledgeAnswerInputDto
+  ): Promise<GenerateKnowledgeAnswerResultDto> {
+    const question = input.question.trim()
+
+    if (!question) {
+      throw new Error('请输入要写入知识库的问题。')
+    }
+
+    const config = await this.loadConfig()
+    const documents = await loadKnowledgeDocuments(this.workspaceRoot)
+    const scoredDocuments = documents
+      .map((document) => ({
+        document,
+        score:
+          scoreSearchField(document.title, question, 110) +
+          scoreSearchField(document.summary, question, 84) +
+          scoreSearchField(document.excerpt, question, 92) +
+          scoreSearchField(document.type, question, 32) +
+          scoreSearchField(document.sources.join(' '), question, 26) +
+          scoreSearchField(document.related.join(' '), question, 22)
+      }))
+      .filter((item) => item.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, input.format === 'brief' ? 4 : 6)
+      .map((item) => item.document)
+
+    const generatedAt = new Date().toISOString()
+    const outputDirectory = input.format === 'brief' ? 'outputs/briefs' : 'outputs/answers'
+    const outputFileName = `${generatedAt.replace(/[:]/g, '-').replace(/\..+$/, '')}-${sanitizeFileSegment(question).slice(0, 48)}-${input.format}.md`
+    const relativePath = `${outputDirectory}/${outputFileName}`
+    const outputPath = join(this.workspaceRoot, relativePath)
+    const content = buildKnowledgeAnswerContent({
+      projectTitle: config.title,
+      question,
+      format: input.format,
+      documents: scoredDocuments,
+      generatedAt
+    })
+
+    await mkdir(join(this.workspaceRoot, outputDirectory), { recursive: true })
+    await writeFile(outputPath, `${content.trim()}\n`, 'utf8')
+
+    return {
+      documentId: createKnowledgeDocumentId(relativePath),
+      title: question,
+      relativePath,
+      outputPath,
+      summary:
+        scoredDocuments.length > 0
+          ? `已基于 ${scoredDocuments.length} 份知识资产生成一份 ${input.format === 'brief' ? '简报' : '报告'}。`
+          : '当前没有命中足够知识资产，已生成一份提示补料方向的空白回答。',
+      excerpt: createKnowledgeExcerpt(content, 160)
     }
   }
 
@@ -2172,10 +2303,7 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
     const nextContent = normalizeNarrativeContent(input.content)
     const nextEditedAt = formatTimestamp()
     const nextWordCount = countNarrativeChars(nextContent)
-
-    await writeFile(join(this.workspaceRoot, chapter.file), nextContent, 'utf8')
-
-    await this.saveConfig({
+    const nextConfig: NovelProjectConfig = {
       ...config,
       currentSurface: 'writing',
       currentChapterId: chapter.chapterId,
@@ -2188,7 +2316,20 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
             }
           : item
       )
-    })
+    }
+
+    await writeFile(join(this.workspaceRoot, chapter.file), nextContent, 'utf8')
+    await this.saveConfig(nextConfig)
+    await syncKnowledgeScaffoldFiles(
+      this.workspaceRoot,
+      nextConfig,
+      {
+        ...chapter,
+        wordCount: nextWordCount,
+        lastEditedAt: nextEditedAt
+      },
+      nextContent
+    )
 
     return {
       chapterId: chapter.chapterId,
@@ -3065,6 +3206,16 @@ export const createNovelProjectWorkspace = async (
   await Promise.all(
     [
       'manuscript/chapters',
+      'raw/captures',
+      'raw/research',
+      'raw/images',
+      'raw/notes',
+      'compiled/entities',
+      'compiled/chapters',
+      'compiled/timelines',
+      'compiled/themes',
+      'compiled/queries',
+      'compiled/reports',
       'canon/characters',
       'canon/locations',
       'canon/rules',
@@ -3072,6 +3223,10 @@ export const createNovelProjectWorkspace = async (
       'canon/timeline',
       'revisions/snapshots',
       'exports',
+      'outputs/answers',
+      'outputs/briefs',
+      'outputs/slides',
+      'outputs/charts',
       'references',
       '.lime/runtime',
       '.lime/embeddings',
@@ -3086,6 +3241,7 @@ export const createNovelProjectWorkspace = async (
     normalizeNarrativeContent(initialChapterContent),
     'utf8'
   )
+  await syncKnowledgeScaffoldFiles(workspacePath, config, config.chapters[0], normalizeNarrativeContent(initialChapterContent))
 
   return {
     workspacePath,

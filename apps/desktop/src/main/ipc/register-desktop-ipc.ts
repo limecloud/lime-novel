@@ -4,6 +4,7 @@ import type {
   CommitCanonCardInputDto,
   CreateProjectInputDto,
   CreateExportPackageInputDto,
+  GenerateKnowledgeAnswerInputDto,
   SaveChapterInputDto,
   StartTaskInputDto,
   UpdateRevisionIssueInputDto,
@@ -27,6 +28,8 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   removeHandler(CHANNELS.workspace.updateContext)
   removeHandler(CHANNELS.workspace.createProject)
   removeHandler(CHANNELS.workspace.openProjectDialog)
+  removeHandler(CHANNELS.knowledge.loadDocument)
+  removeHandler(CHANNELS.knowledge.generateAnswer)
   removeHandler(CHANNELS.chapter.loadDocument)
   removeHandler(CHANNELS.chapter.saveDocument)
   removeHandler(CHANNELS.chapter.applyProposal)
@@ -38,6 +41,7 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   removeHandler(CHANNELS.revision.undoRecord)
   removeHandler(CHANNELS.publish.createExportPackage)
   removeHandler(CHANNELS.agent.startTask)
+  removeHandler(CHANNELS.agent.loadTaskDiagnostics)
 
   ipcMain.handle(CHANNELS.workspace.loadShell, async () => services.loadWorkspaceShell())
   ipcMain.handle(CHANNELS.workspace.searchWorkspace, async (_event, input: WorkspaceSearchInputDto) =>
@@ -50,6 +54,12 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
     services.createProject(input)
   )
   ipcMain.handle(CHANNELS.workspace.openProjectDialog, async () => services.openProjectDialog())
+  ipcMain.handle(CHANNELS.knowledge.loadDocument, async (_event, relativePath: string) =>
+    services.loadKnowledgeDocument(relativePath)
+  )
+  ipcMain.handle(CHANNELS.knowledge.generateAnswer, async (_event, input: GenerateKnowledgeAnswerInputDto) =>
+    services.generateKnowledgeAnswer(input)
+  )
   ipcMain.handle(CHANNELS.chapter.loadDocument, async (_event, chapterId: string) =>
     services.loadChapterDocument(chapterId)
   )
@@ -79,6 +89,7 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   ipcMain.handle(CHANNELS.agent.startTask, async (_event, input: StartTaskInputDto) =>
     services.startAgentTask(input)
   )
+  ipcMain.handle(CHANNELS.agent.loadTaskDiagnostics, async () => services.loadAgentTaskDiagnostics())
 
   const unsubscribe = services.agentRuntime.subscribe((event) => {
     if (!mainWindow.isDestroyed()) {

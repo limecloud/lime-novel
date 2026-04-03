@@ -1,0 +1,118 @@
+<svg width="1600" height="960" viewBox="0 0 1600 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgKbHome" x1="0" y1="0" x2="1600" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4EEE3"/>
+      <stop offset="1" stop-color="#E7DED0"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .title { font: 700 24px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h1 { font: 700 18px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .h2 { font: 700 15px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #1F1D19; }
+    .body { font: 500 13px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #635C52; }
+    .small { font: 500 12px "PingFang SC", "Microsoft YaHei", sans-serif; fill: #7A7368; }
+  </style>
+
+  <rect width="1600" height="960" rx="28" fill="url(#bgKbHome)"/>
+  <rect x="24" y="24" width="1552" height="912" rx="24" fill="#FBF8F1" stroke="#D9D0C0"/>
+  <rect x="24" y="24" width="1552" height="56" rx="24" fill="#F7F2E8"/>
+  <text x="56" y="59" class="title">Lime Novel / 项目首页（知识库增强）</text>
+  <text x="978" y="59" class="body">首页先回答三件事：项目是否健康、最近学到了什么、现在最值得问什么</text>
+
+  <rect x="44" y="100" width="72" height="816" rx="20" fill="#F2EBDD" stroke="#DDD3C3"/>
+  <rect x="56" y="124" width="48" height="48" rx="14" fill="#486A57"/>
+  <text x="72" y="154" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#F7F4EE">首</text>
+  <rect x="56" y="188" width="48" height="48" rx="14" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="72" y="218" class="small">写</text>
+  <rect x="56" y="252" width="48" height="48" rx="14" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="72" y="282" class="small">知</text>
+  <rect x="56" y="316" width="48" height="48" rx="14" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="72" y="346" class="small">修</text>
+  <rect x="56" y="380" width="48" height="48" rx="14" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="72" y="410" class="small">发</text>
+
+  <rect x="132" y="100" width="272" height="816" rx="22" fill="#F3ECE0" stroke="#DDD3C3"/>
+  <text x="160" y="140" class="h1">项目与知识入口</text>
+  <rect x="160" y="164" width="216" height="44" rx="14" fill="#486A57"/>
+  <text x="208" y="192" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#F7F4EE">+ 导入资料或章节</text>
+
+  <text x="160" y="246" class="h2">最近项目</text>
+  <rect x="160" y="262" width="216" height="74" rx="18" fill="#DCE8DF" stroke="#B7CCBC"/>
+  <text x="182" y="294" class="body">《钟塔尽头的雨季》</text>
+  <text x="182" y="320" class="small">上次编译：15 分钟前</text>
+
+  <text x="160" y="384" class="h2">快速提问</text>
+  <rect x="160" y="400" width="216" height="152" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="182" y="432" class="small">/林清远当前知道什么</text>
+  <text x="182" y="460" class="small">/第 12 章前有哪些伏笔未回收</text>
+  <text x="182" y="488" class="small">/哪些知识页证据不足</text>
+
+  <text x="160" y="602" class="h2">最近输出</text>
+  <rect x="160" y="618" width="216" height="174" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="182" y="650" class="small">report.md：林清远的信息差</text>
+  <text x="182" y="678" class="small">lint-report.md：时间线冲突 2 处</text>
+  <text x="182" y="706" class="small">slides.md：第二卷中段回收汇报</text>
+
+  <rect x="428" y="100" width="736" height="816" rx="22" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="460" y="140" class="h1">项目恢复与知识健康度</text>
+
+  <rect x="460" y="168" width="672" height="166" rx="22" fill="#F7F2E8" stroke="#D9D0C0"/>
+  <text x="492" y="214" class="title" style="font-size:28px;">《钟塔尽头的雨季》</text>
+  <text x="492" y="248" class="body">当前状态：第 12 章草稿推进中，知识层已覆盖主要角色、规则和钟楼主线，但时间线仍有 2 处冲突待清理。</text>
+  <text x="492" y="280" class="small">raw 48 份 / compiled 96 页 / canon 26 页 / outputs 14 份</text>
+  <rect x="492" y="296" width="180" height="12" rx="6" fill="#E6DED0"/>
+  <rect x="492" y="296" width="132" height="12" rx="6" fill="#486A57"/>
+  <text x="686" y="306" class="small">健康度 73%</text>
+
+  <rect x="460" y="364" width="320" height="228" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="486" y="406" class="h2">最近编译结果</text>
+  <text x="486" y="438" class="small">新增 3 页：钟楼钥匙 / 雨夜入口 / 林清远情绪阈值</text>
+  <text x="486" y="466" class="small">更新 2 页：第 12 章摘要 / 时间线页</text>
+  <text x="486" y="494" class="small">冲突 1 处：父亲失踪日期前后不一致</text>
+  <rect x="486" y="530" width="132" height="36" rx="16" fill="#486A57"/>
+  <text x="524" y="553" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#F7F4EE">打开知识页</text>
+
+  <rect x="812" y="364" width="320" height="228" rx="20" fill="#FAF6EE" stroke="#D9D0C0"/>
+  <text x="838" y="406" class="h2">现在最值得问</text>
+  <text x="838" y="438" class="small">谁最早知道钟楼入口的位置？</text>
+  <text x="838" y="466" class="small">第 12 章前还有哪些未回收伏笔？</text>
+  <text x="838" y="494" class="small">林清远对父亲失踪案的认知边界是什么？</text>
+
+  <rect x="460" y="622" width="672" height="254" rx="20" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="486" y="664" class="h2">设计判断</text>
+  <text x="486" y="700" class="body">首页不是“知识管理后台”，而是作者重新进入项目时的认知仪表盘。</text>
+  <text x="486" y="732" class="body">它应该先告诉作者：项目学到了什么、哪里不稳、现在问什么最有价值。</text>
+  <text x="486" y="764" class="body">这样知识库不会变成孤立子系统，而会持续拉动写作和修订主链。</text>
+
+  <rect x="1192" y="100" width="364" height="816" rx="22" fill="#F7F2E8" stroke="#DDD3C3"/>
+  <text x="1220" y="140" class="h1">项目总控代理</text>
+  <rect x="1220" y="162" width="84" height="30" rx="15" fill="#486A57"/>
+  <text x="1248" y="182" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#F7F4EE">建议</text>
+  <rect x="1314" y="162" width="84" height="30" rx="15" fill="#DCE8DF"/>
+  <text x="1342" y="182" class="small">对话</text>
+
+  <rect x="1220" y="216" width="308" height="112" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="250" class="h2">恢复摘要</text>
+  <text x="1240" y="278" class="small">我已同步最近 3 次编译结果，当前项目最主要的问题是时间线冲突和一页证据不足。</text>
+  <text x="1240" y="304" class="small">第 12 章相关知识页已是最新。</text>
+
+  <rect x="1248" y="352" width="280" height="96" rx="18" fill="#EAF1EC" stroke="#B7CCBC"/>
+  <text x="1268" y="384" class="small">建议先追问“林清远现在知道什么”，</text>
+  <text x="1268" y="408" class="small">结果会直接帮助你决定第 12 章的信息揭示节奏。</text>
+
+  <rect x="1220" y="474" width="308" height="178" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="510" class="h2">后台结果</text>
+  <text x="1240" y="538" class="small">编译代理：新增 3 页知识页</text>
+  <text x="1240" y="564" class="small">巡检代理：发现 2 处日期冲突</text>
+  <text x="1240" y="590" class="small">查询代理：最近报告可直接复用到修订</text>
+  <text x="1240" y="616" class="small">可审批：升级“钟楼钥匙”为正式 canon</text>
+
+  <rect x="1220" y="678" width="308" height="122" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="714" class="h2">建议动作</text>
+  <text x="1240" y="742" class="small">/打开知识工作面</text>
+  <text x="1362" y="742" class="small">/继续第12章</text>
+  <text x="1240" y="768" class="small">/生成信息差报告</text>
+
+  <rect x="1220" y="824" width="308" height="58" rx="18" fill="#FFFDF8" stroke="#D9D0C0"/>
+  <text x="1240" y="850" class="small">首页先做认知恢复，而不是先把作者推回空白对话。</text>
+</svg>
