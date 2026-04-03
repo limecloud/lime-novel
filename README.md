@@ -52,6 +52,8 @@ npm run verify:gui-smoke
 ```bash
 npm run dist
 npm run dist:mac
+npm run dist:mac:arm64
+npm run dist:mac:x64
 npm run dist:win
 npm run dist:linux
 ```
@@ -104,17 +106,20 @@ node scripts/sync-version.mjs 0.2.0
 
 1. 按目标版本同步工作区 `package.json` 版本
 2. 在对应平台执行 `electron-builder`
-3. 上传平台产物
-4. 汇总产物并创建 GitHub Draft Release
+3. macOS 按 `arm64` 与 `x64` 两条独立流水线分别产出直装包
+4. 上传平台产物
+5. 汇总产物并创建 GitHub Draft Release
 
 当前默认产物：
 
 - Windows：`nsis`、`zip`
-- macOS：`dmg`、`zip`
+- macOS ARM64：`lime-novel-v0.2.0-macos-arm64.dmg`、`lime-novel-v0.2.0-macos-arm64.zip`
+- macOS x64：`lime-novel-v0.2.0-macos-x64.dmg`、`lime-novel-v0.2.0-macos-x64.zip`
 - Linux：`AppImage`、`tar.gz`
 
 说明：
 
+- macOS 发布链参考了 Lime 主仓库的双机型思路，分别在 Apple Silicon 与 Intel runner 上构建，避免用户下载后再做架构转换判断
 - macOS 流程当前默认关闭自动代码签名发现，优先保证 unsigned 构建可产出
 - 如果后续接入苹果签名、公证或 Windows 代码签名，只需要在 release workflow 里补环境变量与签名步骤
 

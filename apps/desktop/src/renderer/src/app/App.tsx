@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import type { NovelSurfaceId } from '@lime-novel/domain-novel'
+import type { FeatureToolId, NovelSurfaceId } from '@lime-novel/domain-novel'
 import { desktopApi } from '../lib/desktop-api'
 import { agentFeedStore, useAgentFeedState } from '../lib/agent-feed-store'
 import { queryClient } from '../lib/query-client'
@@ -21,6 +21,11 @@ const surfaceHeaderFallback = {
     activeSubAgent: '设定扫描子代理',
     memorySources: ['本章目标', '当前场景', '人物画像', '最近提议'],
     riskLevel: 'medium' as const
+  },
+  'feature-center': {
+    currentAgent: '功能中心',
+    memorySources: ['插件能力', '样本导入', '项目回写', '最近功能'],
+    riskLevel: 'low' as const
   },
   analysis: {
     currentAgent: '拆书代理',
@@ -51,8 +56,34 @@ const surfaceHeaderFallback = {
 const resolveSidebarModeForSurface = (surface: NovelSurfaceId): AgentSidebarMode =>
   surface === 'writing' ? 'dialogue' : 'suggestions'
 
+const resolveWorkspaceSurfaceState = (
+  surface: NovelSurfaceId,
+  featureTool?: FeatureToolId
+): { surface: NovelSurfaceId; featureTool?: FeatureToolId } => {
+  if (surface === 'analysis') {
+    return {
+      surface: 'feature-center',
+      featureTool: 'analysis'
+    }
+  }
+
+  return {
+    surface,
+    featureTool: surface === 'feature-center' ? featureTool : undefined
+  }
+}
+
+const resolveRuntimeSurface = (surface: NovelSurfaceId, featureTool?: FeatureToolId): NovelSurfaceId => {
+  if (surface !== 'feature-center') {
+    return surface
+  }
+
+  return featureTool === 'analysis' ? 'analysis' : 'home'
+}
+
 export const App = () => {
   const [activeSurface, setActiveSurface] = useState<NovelSurfaceId>('home')
+  const [activeFeatureTool, setActiveFeatureTool] = useState<FeatureToolId | undefined>()
   const [sidebarMode, setSidebarMode] = useState<AgentSidebarMode>('suggestions')
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null)
   const [backgroundAutomationCount, setBackgroundAutomationCount] = useState(0)
@@ -147,7 +178,7 @@ export const App = () => {
   })
 
   const updateContextMutation = useMutation({
-    mutationFn: (payload: { surface: NovelSurfaceId; chapterId?: string }) =>
+    mutationFn: (payload: { surface: NovelSurfaceId; featureTool?: FeatureToolId; chapterId?: string }) =>
       desktopApi.workspace.updateContext(payload)
   })
 
@@ -161,6 +192,7 @@ export const App = () => {
     onSuccess: async (result) => {
       lastHydratedWorkspaceKeyRef.current = null
       setActiveSurface('home')
+      setActiveFeatureTool(undefined)
       setActiveChapterId(null)
       setSidebarMode(resolveSidebarModeForSurface('home'))
       queryClient.removeQueries({ queryKey: ['chapter-document'] })
@@ -185,6 +217,7 @@ export const App = () => {
 
       lastHydratedWorkspaceKeyRef.current = null
       setActiveSurface('home')
+      setActiveFeatureTool(undefined)
       setActiveChapterId(null)
       setSidebarMode(resolveSidebarModeForSurface('home'))
       queryClient.removeQueries({ queryKey: ['chapter-document'] })
@@ -227,8 +260,9 @@ export const App = () => {
         return
       }
 
-      setActiveSurface('analysis')
-      setSidebarMode(resolveSidebarModeForSurface('analysis'))
+      setActiveSurface('feature-center')
+      setActiveFeatureTool('analysis')
+      setSidebarMode(resolveSidebarModeForSurface('feature-center'))
       await queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
       agentFeedStore.addLocalStatus('爆款样本已导入', result.summary, result.title)
     },
@@ -390,9 +424,11 @@ export const App = () => {
     }
 
     lastHydratedWorkspaceKeyRef.current = workspaceKey
-    setActiveSurface(shell.project.currentSurface)
+    const nextState = resolveWorkspaceSurfaceState(shell.project.currentSurface, shell.project.currentFeatureTool)
+    setActiveSurface(nextState.surface)
+    setActiveFeatureTool(nextState.featureTool)
     setActiveChapterId(shell.project.currentChapterId)
-    setSidebarMode(shell.project.currentSurface === 'writing' ? 'dialogue' : 'suggestions')
+    setSidebarMode(resolveSidebarModeForSurface(nextState.surface))
     agentFeedStore.hydrate({
       header: shell.agentHeader,
       tasks: shell.agentTasks,
@@ -401,9 +437,11 @@ export const App = () => {
   }, [shellQuery.data])
 
   const displayFeedState = useMemo(() => {
-    const isSurfaceAligned = feedState.header.surface === activeSurface
-    const fallbackHeader = surfaceHeaderFallback[activeSurface]
-    const surfaceTasks = feedState.tasks.filter((task) => task.surface === activeSurface)
+    const feedSurface =
+      activeSurface === 'feature-center' && activeFeatureTool === 'analysis' ? 'analysis' : activeSurface
+    const isSurfaceAligned = feedState.header.surface === feedSurface
+    const fallbackHeader = surfaceHeaderFallback[feedSurface]
+    const surfaceTasks = feedState.tasks.filter((task) => task.surface === feedSurface)
 
     return {
       header: isSurfaceAligned
@@ -411,12 +449,12 @@ export const App = () => {
         : {
             ...feedState.header,
             ...fallbackHeader,
-            surface: activeSurface
+            surface: feedSurface
           },
       tasks: surfaceTasks.length > 0 ? surfaceTasks : feedState.tasks.slice(0, 3),
       feed: feedState.feed
     }
-  }, [activeSurface, feedState])
+  }, [activeFeatureTool, activeSurface, feedState])
 
   const workspaceActivityLabel = useMemo(() => {
     if (openProjectMutation.isPending) {
@@ -532,6 +570,7 @@ export const App = () => {
       chapterDocument={chapterQuery.data}
       activeChapterId={activeChapterId}
       activeSurface={activeSurface}
+      activeFeatureTool={activeFeatureTool}
       sidebarMode={sidebarMode}
       feedState={displayFeedState}
       activityLabel={workspaceActivityLabel}
@@ -541,10 +580,23 @@ export const App = () => {
       isApplyingAnalysisStrategy={applyProjectStrategyProposalMutation.isPending}
       isCreatingExportPackage={createExportPackageMutation.isPending}
       onSurfaceChange={(surface) => {
-        setActiveSurface(surface)
-        setSidebarMode(resolveSidebarModeForSurface(surface))
+        const nextState = resolveWorkspaceSurfaceState(surface)
+        setActiveSurface(nextState.surface)
+        setActiveFeatureTool(nextState.featureTool)
+        setSidebarMode(resolveSidebarModeForSurface(nextState.surface))
         updateContextMutation.mutate({
-          surface,
+          surface: nextState.surface,
+          featureTool: nextState.featureTool,
+          chapterId: activeChapterId ?? undefined
+        })
+      }}
+      onFeatureToolChange={(featureTool) => {
+        setActiveSurface('feature-center')
+        setActiveFeatureTool(featureTool)
+        setSidebarMode(resolveSidebarModeForSurface('feature-center'))
+        updateContextMutation.mutate({
+          surface: 'feature-center',
+          featureTool,
           chapterId: activeChapterId ?? undefined
         })
       }}
@@ -557,6 +609,7 @@ export const App = () => {
       onSidebarModeChange={setSidebarMode}
       onSelectChapter={(chapterId) => {
         setActiveSurface('writing')
+        setActiveFeatureTool(undefined)
         setSidebarMode('dialogue')
         setActiveChapterId(chapterId)
         updateContextMutation.mutate({
@@ -566,6 +619,7 @@ export const App = () => {
       }}
       onInspectRevisionIssueChapter={(chapterId) => {
         setActiveSurface('revision')
+        setActiveFeatureTool(undefined)
         setSidebarMode(resolveSidebarModeForSurface('revision'))
         setActiveChapterId(chapterId)
         updateContextMutation.mutate({
@@ -574,20 +628,33 @@ export const App = () => {
         })
       }}
       onStartTask={(intent, surface) => {
-        const nextSurface = surface ?? activeSurface
+        const requestedSurface = surface ?? activeSurface
+        const requestedFeatureTool =
+          requestedSurface === 'feature-center'
+            ? activeFeatureTool
+            : requestedSurface === 'analysis'
+              ? 'analysis'
+              : undefined
+        const nextState = resolveWorkspaceSurfaceState(requestedSurface, requestedFeatureTool)
+        const runtimeSurface = resolveRuntimeSurface(nextState.surface, nextState.featureTool)
 
-        if (nextSurface !== activeSurface) {
-          setActiveSurface(nextSurface)
+        if (nextState.surface !== activeSurface) {
+          setActiveSurface(nextState.surface)
+        }
+
+        if (nextState.featureTool !== activeFeatureTool) {
+          setActiveFeatureTool(nextState.featureTool)
         }
 
         setSidebarMode('dialogue')
         updateContextMutation.mutate({
-          surface: nextSurface,
+          surface: nextState.surface,
+          featureTool: nextState.featureTool,
           chapterId: activeChapterId ?? undefined
         })
         startTaskMutation.mutate({
           intent,
-          surface: nextSurface,
+          surface: runtimeSurface,
           chapterId: activeChapterId ?? undefined
         })
       }}

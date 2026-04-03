@@ -19,7 +19,7 @@ import type {
   WorkspaceSearchItemDto,
   WorkspaceShellDto
 } from '@lime-novel/application'
-import type { NovelSurfaceId } from '@lime-novel/domain-novel'
+import type { FeatureToolId, NovelSurfaceId } from '@lime-novel/domain-novel'
 import { ChapterEditor } from '../editor/ChapterEditor'
 import { AgentSidebar } from '../agent-feed/AgentSidebar'
 import type { AgentSidebarMode } from '../agent-feed/AgentSidebar'
@@ -38,6 +38,7 @@ type NovelWorkbenchProps = {
   chapterDocument?: ChapterDocumentDto
   activeChapterId?: string | null
   activeSurface: NovelSurfaceId
+  activeFeatureTool?: FeatureToolId
   sidebarMode: AgentSidebarMode
   feedState: AgentFeedSnapshot
   activityLabel: string
@@ -47,6 +48,7 @@ type NovelWorkbenchProps = {
   isApplyingAnalysisStrategy: boolean
   isCreatingExportPackage: boolean
   onSurfaceChange: (surface: NovelSurfaceId) => void
+  onFeatureToolChange: (tool?: FeatureToolId) => void
   onCreateProject: (input: CreateProjectInputDto) => void
   onOpenProject: () => void
   onSidebarModeChange: (mode: AgentSidebarMode) => void
@@ -141,10 +143,21 @@ const riskLevelLabel: Record<ExportComparisonDto['riskLevel'], string> = {
 const surfaceLabel: Record<NovelSurfaceId, string> = {
   home: '首页',
   writing: '写作',
+  'feature-center': '功能中心',
   analysis: '拆书',
   canon: '设定',
   revision: '修订',
   publish: '发布'
+}
+
+const featureToolLabel: Record<FeatureToolId, string> = {
+  analysis: '拆书'
+}
+
+const featureCenterEntry = {
+  id: 'feature-center' as const,
+  label: '功能中心',
+  description: '插件式创作能力与辅助工具'
 }
 
 const searchItemKindLabel: Record<WorkspaceSearchItemDto['kind'], string> = {
@@ -155,6 +168,14 @@ const searchItemKindLabel: Record<WorkspaceSearchItemDto['kind'], string> = {
   'canon-card': '设定卡',
   'revision-issue': '修订问题',
   'export-preset': '导出预设'
+}
+
+const resolveWorkspaceSearchSurfaceLabel = (item: WorkspaceSearchItemDto): string => {
+  if (item.surface === 'feature-center' && item.featureTool) {
+    return `${surfaceLabel[item.surface]} / ${featureToolLabel[item.featureTool]}`
+  }
+
+  return surfaceLabel[item.surface]
 }
 
 const canonCategoryDefinitions: Array<{
@@ -428,6 +449,18 @@ const SurfaceIcon = ({ surface }: { surface: NovelSurfaceId }) => {
         <path d="M6.5 6.5h11" {...iconStrokeProps} />
         <path d="M12 6.5v11" {...iconStrokeProps} />
         <path d="M8.75 17.5h6.5" {...iconStrokeProps} />
+      </svg>
+    )
+  }
+
+  if (surface === 'feature-center') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="5" y="5" width="5.5" height="5.5" rx="1.5" {...iconStrokeProps} />
+        <rect x="13.5" y="5" width="5.5" height="5.5" rx="1.5" {...iconStrokeProps} />
+        <rect x="5" y="13.5" width="5.5" height="5.5" rx="1.5" {...iconStrokeProps} />
+        <path d="M14.25 16.25h4.5" {...iconStrokeProps} />
+        <path d="M16.5 14v4.5" {...iconStrokeProps} />
       </svg>
     )
   }
@@ -760,7 +793,7 @@ const WorkspaceSearchModal = ({
               >
                 <div className="workspace-search-result__meta">
                   <span className="workspace-search-result__kind">{searchItemKindLabel[item.kind]}</span>
-                  <span className="workspace-search-result__surface">{surfaceLabel[item.surface]}</span>
+                  <span className="workspace-search-result__surface">{resolveWorkspaceSearchSurfaceLabel(item)}</span>
                 </div>
                 <strong>{item.title}</strong>
                 <p>{item.snippet}</p>
@@ -2093,8 +2126,8 @@ const HomeStructurePanel = ({
 
     <div className="structure-panel__section">
       <span className="eyebrow">待处理结果</span>
-      <button className="panel-list-button" onClick={() => onSurfaceChange('analysis')}>
-        <strong>拆书代理</strong>
+      <button className="panel-list-button" onClick={() => onSurfaceChange('feature-center')}>
+        <strong>功能中心 / 拆书</strong>
         <span>{shell.analysisSamples.length > 0 ? `${shell.analysisSamples.length} 个样本可继续对标` : '先导入爆款样本开始建模'}</span>
       </button>
       <button className="panel-list-button" onClick={() => onSurfaceChange('canon')}>
@@ -2302,6 +2335,41 @@ const PublishStructurePanel = ({
   </div>
 )
 
+const FeatureCenterStructurePanel = ({
+  shell,
+  activeFeatureTool,
+  onFeatureToolChange
+}: {
+  shell: WorkspaceShellDto
+  activeFeatureTool?: FeatureToolId
+  onFeatureToolChange: (tool?: FeatureToolId) => void
+}) => (
+  <div className="structure-panel__content">
+    <div className="structure-panel__section">
+      <span className="eyebrow">功能列表</span>
+      <button
+        className={activeFeatureTool === 'analysis' ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
+        onClick={() => onFeatureToolChange('analysis')}
+      >
+        <strong>拆书</strong>
+        <span>{shell.analysisSamples.length > 0 ? `${shell.analysisSamples.length} 个样本已导入` : '导入 TXT / Markdown 自动开始拆解'}</span>
+      </button>
+    </div>
+
+    <div className="structure-panel__section">
+      <span className="eyebrow">接入方式</span>
+      <div className="panel-note">
+        <strong>文件直接导入</strong>
+        <span>不需要手填标题、作者和评论，导入后会从文件名和正文自动推断样本信息。</span>
+      </div>
+      <div className="panel-note">
+        <strong>支持格式</strong>
+        <span>`.txt`、`.md`、`.markdown`</span>
+      </div>
+    </div>
+  </div>
+)
+
 const AnalysisStructurePanel = ({
   overview,
   samples,
@@ -2356,6 +2424,68 @@ const AnalysisStructurePanel = ({
         <strong>当前启发</strong>
         <span>{overview.projectAngles[0] ?? '导入后会自动生成立项启发。'}</span>
       </div>
+    </div>
+  </div>
+)
+
+const FeatureCenterHomeSurface = ({
+  shell,
+  onFeatureToolChange
+}: {
+  shell: WorkspaceShellDto
+  onFeatureToolChange: (tool?: FeatureToolId) => void
+}) => (
+  <div className="surface-stack">
+    <section className="surface-hero surface-hero--feature-center">
+      <div className="surface-hero__main">
+        <span className="eyebrow">功能中心</span>
+        <h1>把辅助能力集中收进一个独立入口</h1>
+        <p>这里专门放插件式工具，不和首页、写作、设定、修订、发布混在一起。当前第一个功能就是拆书。</p>
+        <div className="hero-metrics">
+          <span>已启用功能 1 个</span>
+          <span>拆书样本 {shell.analysisSamples.length}</span>
+          <span>支持导入 TXT / Markdown</span>
+        </div>
+      </div>
+    </section>
+
+    <div className="surface-grid surface-grid--two">
+      <button className="surface-card surface-card--selectable feature-tool-card" onClick={() => onFeatureToolChange('analysis')}>
+        <div className="feature-tool-card__meta">
+          <span className="eyebrow">第一个功能</span>
+          <strong>拆书</strong>
+        </div>
+        <p>导入 `.txt`、`.md` 或 `.markdown` 文件，自动拆钩子、人物吸引力、节奏和风险信号，不需要手填一堆字段。</p>
+        <div className="detail-list detail-list--compact">
+          <div className="detail-list__item">
+            <strong>当前状态</strong>
+            <span>{shell.analysisSamples.length > 0 ? `${shell.analysisSamples.length} 个样本可继续对标` : '等待首个样本文件'}</span>
+          </div>
+          <div className="detail-list__item">
+            <strong>默认流程</strong>
+            <span>{'导入文件 -> 自动建模 -> 选择性回写项目'}</span>
+          </div>
+        </div>
+      </button>
+
+      <article className="surface-card">
+        <span className="eyebrow">当前接入方式</span>
+        <h2>直接导入文本文件</h2>
+        <div className="detail-list">
+          <div className="detail-list__item">
+            <strong>支持格式</strong>
+            <span>`.txt`、`.md`、`.markdown`</span>
+          </div>
+          <div className="detail-list__item">
+            <strong>自动推断</strong>
+            <span>标题、摘要和题材信号会从文件名与正文内容里自动生成。</span>
+          </div>
+          <div className="detail-list__item">
+            <strong>回写策略</strong>
+            <span>只把值得保留的结论回写到首页高亮、快捷动作和候选设定卡。</span>
+          </div>
+        </div>
+      </article>
     </div>
   </div>
 )
@@ -2583,6 +2713,7 @@ export const NovelWorkbench = ({
   chapterDocument,
   activeChapterId: currentChapterId,
   activeSurface,
+  activeFeatureTool,
   sidebarMode,
   feedState,
   activityLabel,
@@ -2592,6 +2723,7 @@ export const NovelWorkbench = ({
   isApplyingAnalysisStrategy,
   isCreatingExportPackage,
   onSurfaceChange,
+  onFeatureToolChange,
   onCreateProject,
   onOpenProject,
   onSidebarModeChange,
@@ -2636,6 +2768,7 @@ export const NovelWorkbench = ({
   const [publishVersionTag, setPublishVersionTag] = useState(suggestNextPublishVersion(shell))
   const [publishNotes, setPublishNotes] = useState('')
   const searchRequestIdRef = useRef(0)
+  const isAnalysisToolActive = activeSurface === 'feature-center' && activeFeatureTool === 'analysis'
 
   useEffect(() => {
     if (!shell.sceneList.some((scene) => scene.sceneId === selectedSceneId)) {
@@ -2804,14 +2937,24 @@ export const NovelWorkbench = ({
   const latestPublishConfirmSuggestion = feedState.feed.find(isPublishConfirmSuggestionItem)
   const selectedPreset =
     shell.exportPresets.find((preset) => preset.presetId === selectedPresetId) ?? shell.exportPresets[0]
-  const chapterStatusSummary =
-    activeSurface === 'analysis'
-      ? `爆款样本 ${shell.analysisSamples.length} 个`
-      : activeChapter
-        ? `第 ${activeChapter.order} 章 · ${activeChapter.title}`
-        : '未选择章节'
+  const chapterStatusSummary = (() => {
+    if (isAnalysisToolActive) {
+      return `拆书 · ${shell.analysisSamples.length} 个样本`
+    }
+
+    if (activeSurface === 'feature-center') {
+      return activeFeatureTool ? featureToolLabel[activeFeatureTool] : '功能中心'
+    }
+
+    if (activeChapter) {
+      return `第 ${activeChapter.order} 章 · ${activeChapter.title}`
+    }
+
+    return '未选择章节'
+  })()
+  const statusBarContextLabel = activeSurface === 'feature-center' ? '当前功能' : '当前章节'
   const visibleQuickActions: QuickActionDto[] =
-    activeSurface === 'analysis' && selectedAnalysisSample
+    isAnalysisToolActive && selectedAnalysisSample
       ? [
           {
             id: `analysis-quick-hook-${selectedAnalysisSample.sampleId}`,
@@ -2882,8 +3025,22 @@ export const NovelWorkbench = ({
       return
     }
 
+    if (item.surface === 'feature-center') {
+      if (item.featureTool) {
+        onFeatureToolChange(item.featureTool)
+      } else {
+        onSurfaceChange('feature-center')
+      }
+
+      if (item.featureTool === 'analysis' && item.entityId) {
+        setSelectedAnalysisSampleId(item.entityId)
+      }
+
+      return
+    }
+
     if (item.surface === 'analysis') {
-      onSurfaceChange('analysis')
+      onFeatureToolChange('analysis')
       if (item.entityId) {
         setSelectedAnalysisSampleId(item.entityId)
       }
@@ -2946,7 +3103,7 @@ export const NovelWorkbench = ({
             aria-expanded={isSearchModalOpen}
             title="搜索当前项目"
           >
-            <span className="command-trigger__label">搜索章节 / 样本 / 设定 / 修订</span>
+            <span className="command-trigger__label">搜索章节 / 功能 / 设定 / 修订</span>
             <span className="command-trigger__hint">⌘K</span>
           </button>
 
@@ -2964,25 +3121,46 @@ export const NovelWorkbench = ({
 
       <div className={gridClass}>
         <nav className="nav-rail">
-          {shell.navigation.map((item) => (
+          <div className="nav-rail__group">
+            {shell.navigation.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                data-surface={item.id}
+                className={item.id === activeSurface ? 'nav-button nav-button--active' : 'nav-button'}
+                onClick={() => onSurfaceChange(item.id)}
+                aria-label={`${item.label}，${item.description}`}
+                title={`${item.label} · ${item.description}`}
+              >
+                <span className="nav-button__glyph" aria-hidden="true">
+                  <SurfaceIcon surface={item.id} />
+                </span>
+                <span className="nav-button__tooltip" role="tooltip">
+                  <strong>{item.label}</strong>
+                  <span>{item.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="nav-rail__footer">
             <button
-              key={item.id}
               type="button"
-              data-surface={item.id}
-              className={item.id === activeSurface ? 'nav-button nav-button--active' : 'nav-button'}
-              onClick={() => onSurfaceChange(item.id)}
-              aria-label={`${item.label}，${item.description}`}
-              title={`${item.label} · ${item.description}`}
+              data-surface={featureCenterEntry.id}
+              className={activeSurface === 'feature-center' ? 'nav-button nav-button--active' : 'nav-button'}
+              onClick={() => onSurfaceChange('feature-center')}
+              aria-label={`${featureCenterEntry.label}，${featureCenterEntry.description}`}
+              title={`${featureCenterEntry.label} · ${featureCenterEntry.description}`}
             >
               <span className="nav-button__glyph" aria-hidden="true">
-                <SurfaceIcon surface={item.id} />
+                <SurfaceIcon surface={featureCenterEntry.id} />
               </span>
               <span className="nav-button__tooltip" role="tooltip">
-                <strong>{item.label}</strong>
-                <span>{item.description}</span>
+                <strong>{featureCenterEntry.label}</strong>
+                <span>{featureCenterEntry.description}</span>
               </span>
             </button>
-          ))}
+          </div>
         </nav>
 
         {!isFocusMode ? (
@@ -3008,7 +3186,14 @@ export const NovelWorkbench = ({
               onStartTask={onStartTask}
             />
           ) : null}
-          {activeSurface === 'analysis' ? (
+          {activeSurface === 'feature-center' && !activeFeatureTool ? (
+            <FeatureCenterStructurePanel
+              shell={shell}
+              activeFeatureTool={activeFeatureTool}
+              onFeatureToolChange={onFeatureToolChange}
+            />
+          ) : null}
+          {isAnalysisToolActive ? (
             <AnalysisStructurePanel
               overview={shell.analysisOverview}
               samples={shell.analysisSamples}
@@ -3066,7 +3251,10 @@ export const NovelWorkbench = ({
               onSaveChapter={onSaveChapter}
             />
           ) : null}
-          {activeSurface === 'analysis' ? (
+          {activeSurface === 'feature-center' && !activeFeatureTool ? (
+            <FeatureCenterHomeSurface shell={shell} onFeatureToolChange={onFeatureToolChange} />
+          ) : null}
+          {isAnalysisToolActive ? (
             <AnalysisSurface
               shell={shell}
               overview={shell.analysisOverview}
@@ -3151,7 +3339,7 @@ export const NovelWorkbench = ({
 
       <footer className={isFocusMode ? 'status-bar status-bar--hidden' : 'status-bar'}>
         <div className="status-bar__item">
-          <span className="status-bar__label">当前章节</span>
+          <span className="status-bar__label">{statusBarContextLabel}</span>
           <strong>{chapterStatusSummary}</strong>
         </div>
         <div className="status-bar__item status-bar__item--accent">

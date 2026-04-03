@@ -87,9 +87,19 @@ jobs:
             !dist/win-unpacked
 
   build_macos:
-    name: Build macOS
+    name: Build macOS (${{ matrix.label }})
     if: github.event_name == 'push' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'mac'
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: arm64
+            label: arm64
+          - runner: macos-15-intel
+            arch: x64
+            label: x64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
 
     steps:
@@ -130,7 +140,7 @@ jobs:
         run: node scripts/sync-version.mjs ${{ steps.meta.outputs.version }}
 
       - name: Build macOS artifacts
-        run: npm run dist:mac
+        run: npm run dist:mac:${{ matrix.arch }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -138,12 +148,12 @@ jobs:
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lime-novel-macos
+          name: lime-novel-macos-${{ matrix.arch }}
           path: |
-            dist/*
-            !dist/builder-debug.yml
-            !dist/mac
-            !dist/mac-arm64
+            dist/*-macos-${{ matrix.arch }}.dmg
+            dist/*-macos-${{ matrix.arch }}.dmg.blockmap
+            dist/*-macos-${{ matrix.arch }}.zip
+            dist/*-macos-${{ matrix.arch }}.zip.blockmap
 
   build_linux:
     name: Build Linux
@@ -248,7 +258,8 @@ jobs:
         if: needs.build_macos.result == 'success'
         uses: actions/download-artifact@v4
         with:
-          name: lime-novel-macos
+          pattern: lime-novel-macos-*
+          merge-multiple: true
           path: release-assets
 
       - name: Download Linux artifacts

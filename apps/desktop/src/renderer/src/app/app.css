@@ -450,6 +450,29 @@ input {
   overflow: visible;
 }
 
+.nav-rail__group,
+.nav-rail__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-rail__footer {
+  position: relative;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.nav-rail__footer::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 4px;
+  top: 0;
+  height: 1px;
+  background: rgba(216, 208, 198, 0.86);
+}
+
 .nav-rail::before {
   content: '';
   position: absolute;
@@ -511,6 +534,11 @@ input {
 .nav-button[data-surface='writing'] .nav-button__glyph {
   background: #fbeaf4;
   color: #cb4f9d;
+}
+
+.nav-button[data-surface='feature-center'] .nav-button__glyph {
+  background: #eef3de;
+  color: #5d7b35;
 }
 
 .nav-button[data-surface='canon'] .nav-button__glyph {
@@ -925,6 +953,12 @@ input {
     linear-gradient(180deg, #f6f1e8 0%, var(--paper) 100%);
 }
 
+.surface-hero--feature-center {
+  background:
+    radial-gradient(circle at top right, rgba(127, 153, 78, 0.16), transparent 34%),
+    linear-gradient(180deg, #f2f4e8 0%, var(--paper) 100%);
+}
+
 .analysis-hero-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1005,6 +1039,26 @@ input {
 
 .analysis-signal-list__item--warning strong {
   color: #b86437;
+}
+
+.feature-tool-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.feature-tool-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feature-tool-card__meta strong {
+  font-size: var(--type-heading-lg);
+  line-height: 1.2;
+  color: var(--ink);
 }
 
 .modal-card--wide {
@@ -2924,6 +2978,26 @@ input {
     border: none;
     border-radius: 0;
     overflow: auto;
+  }
+
+  .nav-rail__group,
+  .nav-rail__footer {
+    flex-direction: row;
+  }
+
+  .nav-rail__footer {
+    margin-top: 0;
+    padding-top: 0;
+    padding-left: 10px;
+  }
+
+  .nav-rail__footer::before {
+    left: 0;
+    right: auto;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    height: auto;
   }
 
   .nav-rail::before {

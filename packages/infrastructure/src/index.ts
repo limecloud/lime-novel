@@ -42,7 +42,7 @@ import type {
   WorkspaceShellDto
 } from '@lime-novel/application'
 import { clamp, createId } from '@lime-novel/shared-kernel'
-import type { NovelSurfaceId, RiskLevel, TaskStatus } from '@lime-novel/domain-novel'
+import type { FeatureToolId, NovelSurfaceId, RiskLevel, TaskStatus } from '@lime-novel/domain-novel'
 
 type ChapterSceneConfig = {
   sceneId: string
@@ -96,6 +96,7 @@ type NovelProjectConfig = {
   genre: string
   premise: string
   currentSurface: NovelSurfaceId
+  currentFeatureTool?: FeatureToolId
   currentChapterId: string
   publishState: PublishStateConfig
   volumes: VolumeConfig[]
@@ -238,13 +239,15 @@ type RuntimeSeed = {
 const NAVIGATION = [
   { id: 'home', label: '首页', description: '恢复现场与项目健康度' },
   { id: 'writing', label: '写作', description: '章节树、场景与正文编辑' },
-  { id: 'analysis', label: '拆书', description: '爆款样本、读者信号与立项启发' },
   { id: 'canon', label: '设定', description: '候选卡、关系与时间线' },
   { id: 'revision', label: '修订', description: '问题队列、证据与差异' },
   { id: 'publish', label: '发布', description: '导出预设与平台准备' }
 ] as const
 
-const buildWorkspaceAgentHeader = (surface: NovelSurfaceId): AgentHeaderDto => {
+const buildWorkspaceAgentHeader = (
+  surface: NovelSurfaceId,
+  featureTool?: FeatureToolId
+): AgentHeaderDto => {
   if (surface === 'writing') {
     return {
       currentAgent: '章节代理',
@@ -272,6 +275,19 @@ const buildWorkspaceAgentHeader = (surface: NovelSurfaceId): AgentHeaderDto => {
       surface,
       memorySources: ['样本文本', '题材词', '结构信号', '项目 premise'],
       riskLevel: 'medium'
+    }
+  }
+
+  if (surface === 'feature-center') {
+    if (featureTool === 'analysis') {
+      return buildWorkspaceAgentHeader('analysis')
+    }
+
+    return {
+      currentAgent: '功能中心',
+      surface,
+      memorySources: ['插件能力', '样本导入', '项目回写', '最近功能'],
+      riskLevel: 'low'
     }
   }
 
@@ -640,13 +656,23 @@ const DEFAULT_PUBLISH_STATE: PublishStateConfig = {
   lastOutputDir: ''
 }
 
-const normalizeProjectConfig = (config: NovelProjectConfig): NovelProjectConfig => ({
-  ...config,
-  publishState: {
-    ...DEFAULT_PUBLISH_STATE,
-    ...config.publishState
+const normalizeProjectConfig = (config: NovelProjectConfig): NovelProjectConfig => {
+  const currentSurface = config.currentSurface === 'analysis' ? 'feature-center' : config.currentSurface
+  const currentFeatureTool =
+    currentSurface === 'feature-center'
+      ? config.currentFeatureTool ?? (config.currentSurface === 'analysis' ? 'analysis' : undefined)
+      : undefined
+
+  return {
+    ...config,
+    currentSurface,
+    currentFeatureTool,
+    publishState: {
+      ...DEFAULT_PUBLISH_STATE,
+      ...config.publishState
+    }
   }
-})
+}
 
 const normalizeSearchValue = (value: string): string => value.toLocaleLowerCase().replace(/\s+/g, ' ').trim()
 
@@ -1810,6 +1836,7 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
         releaseVersion: config.publishState.currentVersion,
         lastPublishedAt: config.publishState.lastPublishedAt || undefined,
         currentSurface: config.currentSurface,
+        currentFeatureTool: config.currentFeatureTool,
         currentChapterId: config.currentChapterId
       },
       navigation: [...NAVIGATION],
@@ -1888,7 +1915,7 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
           status: (row as ExportPresetRow).status,
           summary: (row as ExportPresetRow).summary
         })),
-      agentHeader: buildWorkspaceAgentHeader(config.currentSurface),
+      agentHeader: buildWorkspaceAgentHeader(config.currentSurface, config.currentFeatureTool),
       agentTasks: this.database
         .prepare('SELECT task_id, title, summary, status, surface, agent_type FROM agent_tasks ORDER BY rowid DESC')
         .all()
@@ -2020,7 +2047,8 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
           `${row.source_label} ${row.synopsis} ${row.hook_summary} ${row.character_summary} ${row.pacing_summary}`,
           query
         ),
-        surface: 'analysis',
+        surface: 'feature-center',
+        featureTool: 'analysis',
         entityId: row.sample_id,
         score: analysisScore
       })
@@ -2124,9 +2152,16 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
 
   async updateWorkspaceContext(input: UpdateWorkspaceContextInputDto): Promise<void> {
     const config = await this.loadConfig()
+    const nextSurface = input.surface === 'analysis' ? 'feature-center' : input.surface
+    const nextFeatureTool =
+      nextSurface === 'feature-center'
+        ? input.featureTool ?? (input.surface === 'analysis' ? 'analysis' : undefined)
+        : undefined
+
     await this.saveConfig({
       ...config,
-      currentSurface: input.surface,
+      currentSurface: nextSurface,
+      currentFeatureTool: nextFeatureTool,
       currentChapterId: input.chapterId ?? config.currentChapterId
     })
   }
@@ -2217,7 +2252,8 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
 
     await this.saveConfig({
       ...config,
-      currentSurface: 'analysis'
+      currentSurface: 'feature-center',
+      currentFeatureTool: 'analysis'
     })
 
     return {
@@ -2283,7 +2319,8 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
 
     await this.saveConfig({
       ...config,
-      currentSurface: 'analysis',
+      currentSurface: 'feature-center',
+      currentFeatureTool: 'analysis',
       homeHighlights: mergeHighlights(config.homeHighlights, buildStrategyHighlights(sample)),
       quickActions: mergeQuickActions(config.quickActions, generatedQuickActions)
     })

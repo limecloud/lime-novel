@@ -1,6 +1,8 @@
-export type NovelSurfaceId = 'home' | 'writing' | 'analysis' | 'canon' | 'revision' | 'publish'
+export type NovelSurfaceId = 'home' | 'writing' | 'feature-center' | 'analysis' | 'canon' | 'revision' | 'publish'
 
 export type NovelAgentType = 'project' | 'chapter' | 'analysis' | 'canon' | 'revision' | 'publish'
+
+export type FeatureToolId = 'analysis'
 
 export type TaskStatus = 'queued' | 'running' | 'waiting_approval' | 'completed' | 'failed'
 
@@ -22,6 +24,7 @@ export type Project = {
   genre: string
   premise: string
   currentSurface: NovelSurfaceId
+  currentFeatureTool?: FeatureToolId
   currentChapterId: string
 }
 

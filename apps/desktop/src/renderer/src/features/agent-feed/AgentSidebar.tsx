@@ -51,6 +51,7 @@ const feedKindLabel: Record<AgentFeedItemDto['kind'], string> = {
 const surfaceLabel: Record<NovelSurfaceId, string> = {
   home: '首页',
   writing: '写作',
+  'feature-center': '功能中心',
   analysis: '拆书',
   canon: '设定',
   revision: '修订',

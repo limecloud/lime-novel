@@ -1,4 +1,5 @@
 import type {
+  FeatureToolId,
   NovelAgentType,
   NovelSurfaceId,
   RiskLevel,
@@ -21,6 +22,7 @@ export type ProjectSummaryDto = {
   releaseVersion: string
   lastPublishedAt?: string
   currentSurface: NovelSurfaceId
+  currentFeatureTool?: FeatureToolId
   currentChapterId: string
 }
 
@@ -262,6 +264,7 @@ export type WorkspaceSearchItemDto = {
   title: string
   snippet: string
   surface: NovelSurfaceId
+  featureTool?: FeatureToolId
   chapterId?: string
   entityId?: string
   score: number
@@ -343,6 +346,7 @@ export type SaveChapterResultDto = {
 
 export type UpdateWorkspaceContextInputDto = {
   surface: NovelSurfaceId
+  featureTool?: FeatureToolId
   chapterId?: string
 }
 

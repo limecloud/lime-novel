@@ -1,6 +1,6 @@
 appId: com.limecloud.limenovel
 productName: Lime Novel
-artifactName: lime-novel-${version}-${os}-${arch}.${ext}
+artifactName: lime-novel-v${version}-${os}-${arch}.${ext}
 directories:
   output: dist
   buildResources: build
@@ -13,16 +13,19 @@ extraResources:
     to: logo-lime.png
 mac:
   category: public.app-category.productivity
+  artifactName: lime-novel-v${version}-macos-${arch}.${ext}
   icon: build/icon.png
   target:
     - dmg
     - zip
 win:
+  artifactName: lime-novel-v${version}-windows-${arch}.${ext}
   icon: build/icon.png
   target:
     - nsis
     - zip
 linux:
+  artifactName: lime-novel-v${version}-linux-${arch}.${ext}
   category: Office
   icon: build/icon.png
   target:
