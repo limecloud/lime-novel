@@ -1,6 +1,7 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import type {
   ApplyProjectStrategyProposalInputDto,
+  AgentRuntimeSettingsDto,
   CommitCanonCardInputDto,
   CreateProjectInputDto,
   CreateExportPackageInputDto,
@@ -40,6 +41,9 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   removeHandler(CHANNELS.revision.updateIssue)
   removeHandler(CHANNELS.revision.undoRecord)
   removeHandler(CHANNELS.publish.createExportPackage)
+  removeHandler(CHANNELS.agent.loadSettings)
+  removeHandler(CHANNELS.agent.saveSettings)
+  removeHandler(CHANNELS.agent.testSettings)
   removeHandler(CHANNELS.agent.startTask)
   removeHandler(CHANNELS.agent.loadTaskDiagnostics)
 
@@ -85,6 +89,13 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   ipcMain.handle(CHANNELS.revision.undoRecord, async (_event, recordId: string) => services.undoRevisionRecord(recordId))
   ipcMain.handle(CHANNELS.publish.createExportPackage, async (_event, input: CreateExportPackageInputDto) =>
     services.createExportPackage(input)
+  )
+  ipcMain.handle(CHANNELS.agent.loadSettings, async () => services.loadAgentRuntimeSettings())
+  ipcMain.handle(CHANNELS.agent.saveSettings, async (_event, input: AgentRuntimeSettingsDto) =>
+    services.saveAgentRuntimeSettings(input)
+  )
+  ipcMain.handle(CHANNELS.agent.testSettings, async (_event, input: AgentRuntimeSettingsDto) =>
+    services.testAgentRuntimeSettings(input)
   )
   ipcMain.handle(CHANNELS.agent.startTask, async (_event, input: StartTaskInputDto) =>
     services.startAgentTask(input)

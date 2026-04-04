@@ -13,7 +13,8 @@ import type {
   TaskEventDto,
   WorkspaceShellDto
 } from '@lime-novel/application'
-import type { NovelSurfaceId, TaskStatus } from '@lime-novel/domain-novel'
+import type { TaskStatus } from '@lime-novel/domain-novel'
+import { buildProjectSurfaceSupportingLabel } from './agent-surface-policy'
 import type {
   LiveAgentExecutionResult,
   LiveAgentFailureSubtype,
@@ -68,17 +69,6 @@ const buildTaskDiagnostics = (
     failure: input.failure,
     updatedAt: nowIso()
   }
-}
-
-const surfaceLabelMap: Record<NovelSurfaceId, string> = {
-  home: '首页',
-  writing: '写作工作面',
-  knowledge: '知识工作面',
-  'feature-center': '功能中心',
-  analysis: '拆书工作面',
-  canon: '设定工作面',
-  revision: '修订工作面',
-  publish: '发布工作面'
 }
 
 const buildProposalRetryPrompt = (input: StartTaskInputDto): string => {
@@ -193,7 +183,7 @@ const defaultSupportingLabel = (
     return chapterLabel ? `${chapterLabel} / 问题队列` : `${shell.project.title} / 问题队列`
   }
 
-  return `${shell.project.title} / ${surfaceLabelMap[input.surface]}`
+  return buildProjectSurfaceSupportingLabel(shell.project.title, input.surface)
 }
 
 const applyArtifactTemplate = (
@@ -307,7 +297,10 @@ const materializeFeedItems = (input: {
       kind: 'status',
       title: '任务结果已同步',
       body: input.assistantText?.trim() || input.result.summary,
-      supportingLabel: `${input.shell.project.title} / ${surfaceLabelMap[input.startInput.surface]}`,
+      supportingLabel: buildProjectSurfaceSupportingLabel(
+        input.shell.project.title,
+        input.startInput.surface
+      ),
       createdAt
     }
   ]

@@ -1,91 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import type { GenerateKnowledgeAnswerInputDto, GenerateKnowledgeAnswerResultDto } from '@lime-novel/application'
+import type {
+  AgentRuntimeConnectionTestResultDto,
+  AgentRuntimeSettingsDto,
+  AgentRuntimeSettingsStateDto,
+  GenerateKnowledgeAnswerInputDto,
+  GenerateKnowledgeAnswerResultDto
+} from '@lime-novel/application'
 import type { FeatureToolId, NovelSurfaceId } from '@lime-novel/domain-novel'
 import { desktopApi } from '../lib/desktop-api'
 import { agentFeedStore, useAgentFeedState } from '../lib/agent-feed-store'
 import { queryClient } from '../lib/query-client'
-import { NovelWorkbench } from '../features/workbench/NovelWorkbench'
 import type { AgentSidebarMode } from '../features/agent-feed/AgentSidebar'
+import { NovelWorkbench } from '../features/workbench/NovelWorkbench'
 import limeLogoUrl from '../assets/logo-lime.png'
+import {
+  buildFeatureToolSurfaceState,
+  buildSurfaceHeaderFallback,
+  normalizeWorkspaceSurfaceState,
+  resolveRuntimeSurface,
+  resolveSidebarModeForSurface
+} from './app-surface-policy'
 import { limeNovelBrand } from './branding'
 
-const surfaceHeaderFallback = {
-  home: {
-    currentAgent: '项目总控代理',
-    activeSubAgent: '章节代理',
-    memorySources: ['项目摘要', '第 12 章', '人物画像', '最近任务'],
-    riskLevel: 'medium' as const
-  },
-  writing: {
-    currentAgent: '章节代理',
-    activeSubAgent: '设定扫描子代理',
-    memorySources: ['本章目标', '当前场景', '人物画像', '最近提议'],
-    riskLevel: 'medium' as const
-  },
-  knowledge: {
-    currentAgent: '知识代理',
-    activeSubAgent: '知识编译子代理',
-    memorySources: ['raw 素材', 'compiled 知识页', 'canon 设定', 'outputs 结果'],
-    riskLevel: 'medium' as const
-  },
-  'feature-center': {
-    currentAgent: '功能中心',
-    memorySources: ['插件能力', '样本导入', '项目回写', '最近功能'],
-    riskLevel: 'low' as const
-  },
-  analysis: {
-    currentAgent: '拆书代理',
-    activeSubAgent: '样本建模子代理',
-    memorySources: ['样本文本', '题材词', '结构信号', '项目 premise'],
-    riskLevel: 'medium' as const
-  },
-  canon: {
-    currentAgent: '设定代理',
-    activeSubAgent: '事实抽取子代理',
-    memorySources: ['候选卡', '证据片段', '章节引用', '时间线'],
-    riskLevel: 'medium' as const
-  },
-  revision: {
-    currentAgent: '修订代理',
-    activeSubAgent: '连续性检查子代理',
-    memorySources: ['问题队列', '相邻章节', '证据片段', '修订记录'],
-    riskLevel: 'high' as const
-  },
-  publish: {
-    currentAgent: '发布代理',
-    activeSubAgent: '导出预检子代理',
-    memorySources: ['导出预设', '版本快照', '平台提示', '元数据'],
-    riskLevel: 'medium' as const
-  }
-}
-
-const resolveSidebarModeForSurface = (surface: NovelSurfaceId): AgentSidebarMode =>
-  surface === 'writing' ? 'dialogue' : 'suggestions'
-
-const resolveWorkspaceSurfaceState = (
-  surface: NovelSurfaceId,
-  featureTool?: FeatureToolId
-): { surface: NovelSurfaceId; featureTool?: FeatureToolId } => {
-  if (surface === 'analysis') {
-    return {
-      surface: 'feature-center',
-      featureTool: 'analysis'
-    }
-  }
-
-  return {
-    surface,
-    featureTool: surface === 'feature-center' ? featureTool : undefined
-  }
-}
-
-const resolveRuntimeSurface = (surface: NovelSurfaceId, featureTool?: FeatureToolId): NovelSurfaceId => {
-  if (surface !== 'feature-center') {
-    return surface
-  }
-
-  return featureTool === 'analysis' ? 'analysis' : 'home'
+const runtimeProviderLabel: Record<AgentRuntimeSettingsStateDto['resolvedProvider'], string> = {
+  legacy: '本地规则模式',
+  anthropic: 'Claude / Anthropic',
+  'openai-compatible': 'OpenAI Compatible'
 }
 
 export const App = () => {
@@ -101,6 +42,11 @@ export const App = () => {
   const shellQuery = useQuery({
     queryKey: ['workspace-shell'],
     queryFn: () => desktopApi.workspace.loadShell()
+  })
+
+  const agentSettingsQuery = useQuery({
+    queryKey: ['agent-runtime-settings'],
+    queryFn: () => desktopApi.agent.loadSettings()
   })
 
   const activeWorkspacePath = shellQuery.data?.workspacePath ?? ''
@@ -173,6 +119,26 @@ export const App = () => {
       }),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      const runtimeState = agentSettingsQuery.data
+
+      if (runtimeState?.mode === 'legacy') {
+        agentFeedStore.addLocalStatus(
+          '当前任务仍在本地规则模式',
+          `${result.task.title} 已启动，但这次没有调用真实模型。`,
+          '打开工作台设置，接入 Claude / Anthropic 后，再发起新任务。'
+        )
+        return
+      }
+
+      if (runtimeState) {
+        agentFeedStore.addLocalStatus(
+          '代理任务已启动',
+          `${result.task.title} 已接入 ${runtimeProviderLabel[runtimeState.resolvedProvider]}。`,
+          `${runtimeState.resolvedModel} · ${result.task.summary}`
+        )
+        return
+      }
+
       agentFeedStore.addLocalStatus('代理任务已启动', result.task.title, result.task.summary)
     },
     onError: (error) => {
@@ -180,6 +146,46 @@ export const App = () => {
         '代理任务启动失败',
         error instanceof Error ? error.message : '当前任务暂时无法启动。',
         '请稍后重试'
+      )
+    }
+  })
+
+  const saveAgentSettingsMutation = useMutation({
+    mutationFn: (input: AgentRuntimeSettingsDto) => desktopApi.agent.saveSettings(input),
+    onSuccess: (result) => {
+      queryClient.setQueryData(['agent-runtime-settings'], result)
+      agentFeedStore.addLocalStatus(
+        'AI Agent 设置已保存',
+        result.mode === 'legacy'
+          ? '已切回本地规则模式，新发起的任务会继续走规则型收口。'
+          : `已切换到 ${runtimeProviderLabel[result.resolvedProvider]}，新发起的任务会使用 ${result.resolvedModel}。`,
+        result.mode === 'legacy' ? '无需模型 API Key' : `${result.resolvedBaseUrl} · 新任务立即生效`
+      )
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        'AI Agent 设置保存失败',
+        error instanceof Error ? error.message : '当前模型设置暂时没有保存成功。',
+        '请稍后重试'
+      )
+    }
+  })
+
+  const testAgentSettingsMutation = useMutation({
+    mutationFn: (input: AgentRuntimeSettingsDto): Promise<AgentRuntimeConnectionTestResultDto> =>
+      desktopApi.agent.testSettings(input),
+    onSuccess: (result) => {
+      agentFeedStore.addLocalStatus(
+        'AI Agent 连接测试成功',
+        result.summary,
+        `${runtimeProviderLabel[result.provider]} · ${result.model} · ${result.latencyMs}ms`
+      )
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        'AI Agent 连接测试失败',
+        error instanceof Error ? error.message : '当前配置没有通过连接测试。',
+        '请检查 provider、API Key、模型和 Base URL'
       )
     }
   })
@@ -447,7 +453,7 @@ export const App = () => {
     }
 
     lastHydratedWorkspaceKeyRef.current = workspaceKey
-    const nextState = resolveWorkspaceSurfaceState(shell.project.currentSurface, shell.project.currentFeatureTool)
+    const nextState = normalizeWorkspaceSurfaceState(shell.project.currentSurface, shell.project.currentFeatureTool)
     setActiveSurface(nextState.surface)
     setActiveFeatureTool(nextState.featureTool)
     setActiveChapterId(shell.project.currentChapterId)
@@ -483,10 +489,12 @@ export const App = () => {
   }, [shellQuery.data])
 
   const displayFeedState = useMemo(() => {
-    const feedSurface =
-      activeSurface === 'feature-center' && activeFeatureTool === 'analysis' ? 'analysis' : activeSurface
+    const feedSurface = resolveRuntimeSurface({
+      surface: activeSurface,
+      featureTool: activeFeatureTool
+    })
     const isSurfaceAligned = feedState.header.surface === feedSurface
-    const fallbackHeader = surfaceHeaderFallback[feedSurface]
+    const fallbackHeader = buildSurfaceHeaderFallback(feedSurface)
     const surfaceTasks = feedState.tasks.filter((task) => task.surface === feedSurface)
 
     return {
@@ -494,8 +502,7 @@ export const App = () => {
         ? feedState.header
         : {
             ...feedState.header,
-            ...fallbackHeader,
-            surface: feedSurface
+            ...fallbackHeader
           },
       tasks: surfaceTasks.length > 0 ? surfaceTasks : feedState.tasks.slice(0, 3),
       feed: feedState.feed,
@@ -632,8 +639,15 @@ export const App = () => {
       isApplyingAnalysisStrategy={applyProjectStrategyProposalMutation.isPending}
       isCreatingExportPackage={createExportPackageMutation.isPending}
       isGeneratingKnowledgeAnswer={generateKnowledgeAnswerMutation.isPending}
+      agentSettingsState={agentSettingsQuery.data}
+      agentSettingsError={agentSettingsQuery.error instanceof Error ? agentSettingsQuery.error.message : undefined}
+      isAgentSettingsLoading={agentSettingsQuery.isLoading}
+      isSavingAgentSettings={saveAgentSettingsMutation.isPending}
+      agentSettingsTestResult={testAgentSettingsMutation.data}
+      agentSettingsTestError={testAgentSettingsMutation.error instanceof Error ? testAgentSettingsMutation.error.message : undefined}
+      isTestingAgentSettings={testAgentSettingsMutation.isPending}
       onSurfaceChange={(surface) => {
-        const nextState = resolveWorkspaceSurfaceState(surface)
+        const nextState = normalizeWorkspaceSurfaceState(surface)
         setActiveSurface(nextState.surface)
         setActiveFeatureTool(nextState.featureTool)
         setSidebarMode(resolveSidebarModeForSurface(nextState.surface))
@@ -644,12 +658,13 @@ export const App = () => {
         })
       }}
       onFeatureToolChange={(featureTool) => {
-        setActiveSurface('feature-center')
-        setActiveFeatureTool(featureTool)
+        const nextState = buildFeatureToolSurfaceState(featureTool)
+        setActiveSurface(nextState.surface)
+        setActiveFeatureTool(nextState.featureTool)
         setSidebarMode(resolveSidebarModeForSurface('feature-center'))
         updateContextMutation.mutate({
-          surface: 'feature-center',
-          featureTool,
+          surface: nextState.surface,
+          featureTool: nextState.featureTool,
           chapterId: activeChapterId ?? undefined
         })
       }}
@@ -688,8 +703,8 @@ export const App = () => {
             : requestedSurface === 'analysis'
               ? 'analysis'
               : undefined
-        const nextState = resolveWorkspaceSurfaceState(requestedSurface, requestedFeatureTool)
-        const runtimeSurface = resolveRuntimeSurface(nextState.surface, nextState.featureTool)
+        const nextState = normalizeWorkspaceSurfaceState(requestedSurface, requestedFeatureTool)
+        const runtimeSurface = resolveRuntimeSurface(nextState)
 
         if (nextState.surface !== activeSurface) {
           setActiveSurface(nextState.surface)
@@ -739,6 +754,12 @@ export const App = () => {
         createExportPackageMutation.mutate(payload)
       }}
       onCreateKnowledgeAnswer={(payload) => generateKnowledgeAnswerMutation.mutateAsync(payload)}
+      onSaveAgentSettings={(input) => {
+        saveAgentSettingsMutation.mutate(input)
+      }}
+      onTestAgentSettings={(input) => {
+        testAgentSettingsMutation.mutate(input)
+      }}
     />
   )
 }

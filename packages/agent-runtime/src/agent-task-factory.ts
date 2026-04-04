@@ -5,10 +5,10 @@ import type {
   StartTaskInputDto,
   WorkspaceShellDto
 } from '@lime-novel/application'
-import type { NovelSurfaceId } from '@lime-novel/domain-novel'
-
-const normalizeRuntimeSurface = (surface: NovelSurfaceId): Exclude<NovelSurfaceId, 'feature-center'> =>
-  surface === 'feature-center' ? 'analysis' : surface
+import {
+  type AgentRuntimeSurface,
+  normalizeRuntimeSurface
+} from './agent-surface-policy'
 
 const inferPublishRiskLevel = (shell: WorkspaceShellDto): AgentHeaderDto['riskLevel'] => {
   if (shell.latestExportComparison?.riskLevel === 'high') {
@@ -25,22 +25,7 @@ const inferPublishRiskLevel = (shell: WorkspaceShellDto): AgentHeaderDto['riskLe
   return 'low'
 }
 
-const buildHeader = (surface: StartTaskInputDto['surface'], shell: WorkspaceShellDto): AgentHeaderDto => {
-  if (surface === 'feature-center') {
-    return {
-      currentAgent: '功能中心',
-      activeSubAgent: '拆书代理',
-      surface,
-      memorySources: [
-        `${shell.analysisOverview.sampleCount} 个已导入样本`,
-        shell.analysisOverview.dominantTags[0] ?? shell.project.genre,
-        shell.analysisOverview.projectAngles[0] ?? shell.project.premise,
-        'TXT / Markdown 样本导入'
-      ],
-      riskLevel: shell.analysisOverview.cautionSignals.length > 1 ? 'medium' : 'low'
-    }
-  }
-
+const buildHeader = (surface: AgentRuntimeSurface, shell: WorkspaceShellDto): AgentHeaderDto => {
   if (surface === 'writing') {
     return {
       currentAgent: '章节代理',
@@ -165,8 +150,8 @@ const buildAnalysisTaskTitle = (intent: string): string => {
   return '拆书分析'
 }
 
-const buildTaskTitle = (surface: NovelSurfaceId, intent: string): string => {
-  if (surface === 'feature-center' || surface === 'analysis') {
+const buildTaskTitle = (surface: AgentRuntimeSurface, intent: string): string => {
+  if (surface === 'analysis') {
     return buildAnalysisTaskTitle(intent)
   }
 
@@ -214,7 +199,7 @@ const buildTaskTitle = (surface: NovelSurfaceId, intent: string): string => {
 }
 
 const resolveAgentType = (
-  surface: Exclude<NovelSurfaceId, 'feature-center'>
+  surface: AgentRuntimeSurface
 ): AgentTaskDto['agentType'] => {
   if (surface === 'home') {
     return 'project'
@@ -253,13 +238,13 @@ export const createAgentTaskSessionSeed = (
   const effectiveSurface = normalizeRuntimeSurface(input.surface)
 
   return {
-    header: buildHeader(input.surface, shell),
+    header: buildHeader(effectiveSurface, shell),
     task: {
       taskId: createId('task'),
-      title: buildTaskTitle(input.surface, input.intent),
+      title: buildTaskTitle(effectiveSurface, input.intent),
       summary: input.intent,
       status: 'queued',
-      surface: input.surface,
+      surface: effectiveSurface,
       agentType: resolveAgentType(effectiveSurface)
     }
   }

@@ -35,6 +35,9 @@ const api: DesktopApiContract = {
     createExportPackage: (input) => ipcRenderer.invoke(CHANNELS.publish.createExportPackage, input)
   },
   agent: {
+    loadSettings: () => ipcRenderer.invoke(CHANNELS.agent.loadSettings),
+    saveSettings: (input) => ipcRenderer.invoke(CHANNELS.agent.saveSettings, input),
+    testSettings: (input) => ipcRenderer.invoke(CHANNELS.agent.testSettings, input),
     startTask: (input) => ipcRenderer.invoke(CHANNELS.agent.startTask, input),
     loadTaskDiagnostics: () => ipcRenderer.invoke(CHANNELS.agent.loadTaskDiagnostics),
     subscribeTaskEvents: (callback: (event: TaskEventDto) => void) => {

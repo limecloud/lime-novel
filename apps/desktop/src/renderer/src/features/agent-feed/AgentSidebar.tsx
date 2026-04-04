@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import type {
   AgentFeedItemDto,
+  AgentTraceEntryDto,
   AgentTaskDiagnosticsDto,
   AgentTaskDto,
   QuickActionDto
 } from '@lime-novel/application'
 import type { NovelSurfaceId } from '@lime-novel/domain-novel'
+import { surfaceLabel } from '../workbench/workbench-navigation-model'
 
 export type AgentSidebarMode = 'agent' | 'suggestions' | 'dialogue'
 
@@ -13,6 +15,7 @@ type AgentSidebarProps = {
   className?: string
   mode: AgentSidebarMode
   onModeChange: (mode: AgentSidebarMode) => void
+  onCollapse?: () => void
   header: {
     currentAgent: string
     activeSubAgent?: string
@@ -24,7 +27,10 @@ type AgentSidebarProps = {
   feed: AgentFeedItemDto[]
   diagnosticsByTaskId: Record<string, AgentTaskDiagnosticsDto>
   quickActions: QuickActionDto[]
+  runtimeMode: 'legacy' | 'live'
+  runtimeLabel: string
   onStartTask: (intent: string, surface?: NovelSurfaceId) => void
+  onOpenSettings: () => void
   onApplyProposal: (proposalId: string) => void
   onRejectProposal: (proposalId: string) => void
   onApplyPublishSynopsisDraft: (value: string) => void
@@ -54,17 +60,6 @@ const feedKindLabel: Record<AgentFeedItemDto['kind'], string> = {
   approval: '审批消息'
 }
 
-const surfaceLabel: Record<NovelSurfaceId, string> = {
-  home: '首页',
-  writing: '写作',
-  knowledge: '知识库',
-  'feature-center': '功能中心',
-  analysis: '拆书',
-  canon: '设定',
-  revision: '修订',
-  publish: '发布'
-}
-
 const approvalStatusLabel: Record<NonNullable<AgentFeedItemDto['approvalStatus']>, string> = {
   pending: '待确认',
   accepted: '已接受',
@@ -80,11 +75,6 @@ const toolEventStatusLabel: Record<
   started: '执行中',
   completed: '已完成',
   failed: '失败'
-}
-
-const parseCreatedAt = (value: string): number => {
-  const timestamp = Date.parse(value)
-  return Number.isNaN(timestamp) ? 0 : timestamp
 }
 
 const formatDiagnosticsTime = (value: string): string => {
@@ -130,6 +120,12 @@ const dedupeFeed = (items: AgentFeedItemDto[]): AgentFeedItemDto[] => {
     seen.add(key)
     return true
   })
+}
+
+const traceRoleLabel: Record<Exclude<AgentTraceEntryDto['role'], 'system'>, string> = {
+  user: '任务输入',
+  assistant: '代理响应',
+  tool: '工具回写'
 }
 
 const FeedCard = ({
@@ -214,16 +210,53 @@ const FeedCard = ({
   </article>
 )
 
+const TraceCard = ({ entry }: { entry: AgentTraceEntryDto }) => {
+  if (entry.role === 'system') {
+    return null
+  }
+
+  const title = traceRoleLabel[entry.role]
+  const hasToolCalls = entry.role === 'assistant' && (entry.toolCalls?.length ?? 0) > 0
+
+  return (
+    <article className={`trace-card trace-card--${entry.role}`}>
+      <div className="trace-card__meta">
+        <span className="trace-card__role">{title}</span>
+        <span className="trace-card__turn">第 {entry.turnIndex} 轮</span>
+      </div>
+      {entry.toolName ? <strong className="trace-card__title">{entry.toolName}</strong> : null}
+      {entry.content ? <p>{entry.content}</p> : null}
+      {hasToolCalls ? (
+        <div className="agent-summary-card__chips">
+          {entry.toolCalls?.map((toolCall) => (
+            <span key={toolCall.id} className="memory-chip">
+              {toolCall.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {entry.stopReason ? <div className="trace-card__supporting">停止原因：{entry.stopReason}</div> : null}
+      {!entry.content && !entry.toolName && !hasToolCalls ? (
+        <div className="trace-card__supporting">当前消息没有额外文本内容。</div>
+      ) : null}
+    </article>
+  )
+}
+
 export const AgentSidebar = ({
   className,
   mode,
   onModeChange,
+  onCollapse,
   header,
   tasks,
   feed,
   diagnosticsByTaskId,
   quickActions,
+  runtimeMode,
+  runtimeLabel,
   onStartTask,
+  onOpenSettings,
   onApplyProposal,
   onRejectProposal,
   onApplyPublishSynopsisDraft,
@@ -238,7 +271,6 @@ export const AgentSidebar = ({
     ...feed.filter((item) => item.kind === 'status'),
     ...feed.filter((item) => item.kind === 'approval')
   ]).slice(0, 4)
-  const dialogueItems = [...feed].sort((left, right) => parseCreatedAt(left.createdAt) - parseCreatedAt(right.createdAt))
   const visibleQuickActions = quickActions.slice(0, 2)
   const diagnosticsTask =
     visibleTasks.find((task) => diagnosticsByTaskId[task.taskId] != null) ??
@@ -250,8 +282,14 @@ export const AgentSidebar = ({
   const totalTokenCount = diagnostics
     ? diagnostics.stats.usage.inputTokens + diagnostics.stats.usage.outputTokens
     : 0
+  const dialogueTrace = diagnostics?.trace.filter((entry) => entry.role !== 'system') ?? []
 
   const handleSubmit = (): void => {
+    if (runtimeMode === 'legacy') {
+      onOpenSettings()
+      return
+    }
+
     if (!draft.trim()) {
       return
     }
@@ -263,24 +301,37 @@ export const AgentSidebar = ({
   return (
     <aside className={className ? `agent-sidebar ${className}` : 'agent-sidebar'}>
       <div className="agent-sidebar__tabs">
-        <button
-          className={mode === 'agent' ? 'tab-button tab-button--active' : 'tab-button'}
-          onClick={() => onModeChange('agent')}
-        >
-          代理
-        </button>
-        <button
-          className={mode === 'suggestions' ? 'tab-button tab-button--active' : 'tab-button'}
-          onClick={() => onModeChange('suggestions')}
-        >
-          建议
-        </button>
-        <button
-          className={mode === 'dialogue' ? 'tab-button tab-button--active' : 'tab-button'}
-          onClick={() => onModeChange('dialogue')}
-        >
-          对话
-        </button>
+        <div className="agent-sidebar__tab-group">
+          <button
+            className={mode === 'agent' ? 'tab-button tab-button--active' : 'tab-button'}
+            onClick={() => onModeChange('agent')}
+          >
+            代理
+          </button>
+          <button
+            className={mode === 'suggestions' ? 'tab-button tab-button--active' : 'tab-button'}
+            onClick={() => onModeChange('suggestions')}
+          >
+            建议
+          </button>
+          <button
+            className={mode === 'dialogue' ? 'tab-button tab-button--active' : 'tab-button'}
+            onClick={() => onModeChange('dialogue')}
+          >
+            对话
+          </button>
+        </div>
+        {onCollapse ? (
+          <button
+            type="button"
+            className="ghost-button agent-sidebar__collapse"
+            onClick={onCollapse}
+            aria-label="折叠右侧栏"
+            title="折叠右侧栏"
+          >
+            折叠
+          </button>
+        ) : null}
       </div>
 
       <section className="agent-sidebar__content">
@@ -382,18 +433,44 @@ export const AgentSidebar = ({
             )}
           </div>
         ) : (
-          (mode === 'suggestions' ? suggestionItems : dialogueItems).map((item) => (
-            <FeedCard
-              key={item.itemId}
-              item={item}
-              onStartTask={onStartTask}
-              onApplyProposal={onApplyProposal}
-              onRejectProposal={onRejectProposal}
-              onApplyPublishSynopsisDraft={onApplyPublishSynopsisDraft}
-              onApplyPublishNotesDraft={onApplyPublishNotesDraft}
-              onOpenPublishConfirm={onOpenPublishConfirm}
-            />
-          ))
+          mode === 'suggestions' ? (
+            runtimeMode === 'legacy' ? (
+              <div className="agent-empty-state">
+                <strong>当前不展示本地规则模式的建议卡</strong>
+                <p>“建议”页现在只保留真实 AI 运行产物。本地规则生成的占位卡片不会再冒充正式建议。</p>
+              </div>
+            ) : suggestionItems.length > 0 ? (
+              suggestionItems.map((item) => (
+                <FeedCard
+                  key={item.itemId}
+                  item={item}
+                  onStartTask={onStartTask}
+                  onApplyProposal={onApplyProposal}
+                  onRejectProposal={onRejectProposal}
+                  onApplyPublishSynopsisDraft={onApplyPublishSynopsisDraft}
+                  onApplyPublishNotesDraft={onApplyPublishNotesDraft}
+                  onOpenPublishConfirm={onOpenPublishConfirm}
+                />
+              ))
+            ) : (
+              <div className="agent-empty-state">
+                <strong>当前还没有真实建议卡</strong>
+                <p>当 live runtime 产出提议、证据或审批结果后，这里才会显示对应卡片。</p>
+              </div>
+            )
+          ) : runtimeMode === 'legacy' ? (
+            <div className="agent-empty-state">
+              <strong>当前没有真实对话轨迹</strong>
+              <p>“对话”页现在只显示 live runtime 的实时 trace。本地规则产物请到“建议”页查看。</p>
+            </div>
+          ) : dialogueTrace.length > 0 ? (
+            dialogueTrace.map((entry, index) => <TraceCard key={`${entry.role}:${entry.turnIndex}:${entry.toolCallId ?? entry.toolName ?? index}`} entry={entry} />)
+          ) : (
+            <div className="agent-empty-state">
+              <strong>当前还没有实时对话轨迹</strong>
+              <p>发起一条新的 live 任务后，这里会按回合显示任务输入、代理响应和工具回写。</p>
+            </div>
+          )
         )}
       </section>
 
@@ -412,9 +489,34 @@ export const AgentSidebar = ({
         </section>
       ) : mode === 'dialogue' ? (
         <section className="agent-sidebar__composer">
+          <article className={runtimeMode === 'live' ? 'agent-runtime-notice agent-runtime-notice--live' : 'agent-runtime-notice'}>
+            <strong>{runtimeMode === 'live' ? `当前已接入 ${runtimeLabel}` : '当前仍在本地规则模式'}</strong>
+            <p>
+              {runtimeMode === 'live'
+                ? '新发起的对话会走真实模型链路；如果输出仍不对，优先查看“代理”页里的运行轨迹和工具事件。'
+                : '这轮对话不会调用真实模型。先去设置里填入 provider 与 API Key，再发起新任务，才能切到 live runtime。'}
+            </p>
+            {runtimeMode === 'legacy' ? (
+              <button type="button" className="ghost-button" onClick={onOpenSettings}>
+                打开 Agent 设置
+              </button>
+            ) : null}
+          </article>
           <div className="quick-actions quick-actions--dialogue">
             {visibleQuickActions.map((action) => (
-              <button key={action.id} className="quick-action" onClick={() => onStartTask(action.prompt)}>
+              <button
+                key={action.id}
+                className="quick-action"
+                disabled={runtimeMode === 'legacy'}
+                onClick={() => {
+                  if (runtimeMode === 'legacy') {
+                    onOpenSettings()
+                    return
+                  }
+
+                  onStartTask(action.prompt)
+                }}
+              >
                 /{action.label}
               </button>
             ))}
@@ -422,10 +524,15 @@ export const AgentSidebar = ({
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="例如：补一版更克制的身体反应，并限制在 120 字内。"
+            placeholder={
+              runtimeMode === 'legacy'
+                ? '当前仍在本地规则模式。先打开 Agent 设置接入真实模型，再回来发起对话。'
+                : '例如：补一版更克制的身体反应，并限制在 120 字内。'
+            }
+            disabled={runtimeMode === 'legacy'}
           />
           <button className="primary-button" onClick={handleSubmit}>
-            提交给当前代理
+            {runtimeMode === 'legacy' ? '先接入真实模型' : '提交给当前代理'}
           </button>
         </section>
       ) : null}

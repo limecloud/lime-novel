@@ -53,10 +53,18 @@ npm run verify:gui-smoke
 
 - `legacy`
   不配置模型时，继续使用仓库内置的规则型本地 runtime
+- `anthropic`
+  对齐 CC 的 Claude / Anthropic messages + tool use 主链
 - `openai-compatible`
   配置模型后，启用真实的单代理 + tool calling 执行内核
 
 最小配置示例：
+
+```bash
+export LIME_NOVEL_AGENT_PROVIDER=anthropic
+export LIME_NOVEL_AGENT_API_KEY=your_anthropic_key
+export LIME_NOVEL_AGENT_MODEL=claude-sonnet-4-6
+```
 
 ```bash
 export LIME_NOVEL_AGENT_PROVIDER=openai-compatible
@@ -64,6 +72,8 @@ export LIME_NOVEL_AGENT_BASE_URL=https://api.openai.com/v1
 export LIME_NOVEL_AGENT_API_KEY=your_api_key
 export LIME_NOVEL_AGENT_MODEL=gpt-4.1-mini
 ```
+
+桌面端也可以直接在左上角品牌按钮打开“工作台设置”，在 `AI Agent 引擎` 中保存 provider / API Key / model / Base URL。保存后只影响新发起的任务，当前运行中的任务不会被中断。
 
 可选环境变量：
 
@@ -81,6 +91,8 @@ export LIME_NOVEL_AGENT_MODEL=gpt-4.1-mini
 行为说明：
 
 - 未配置上述 provider / key / base URL 时，自动走 `legacy`
+- 当 `provider=anthropic` 且 `model` / `baseUrl` 留空时，默认使用 `claude-sonnet-4-6` 与 `https://api.anthropic.com/v1/messages`
+- 当 `provider=openai-compatible` 且 `model` / `baseUrl` 留空时，默认使用 `gpt-4.1-mini` 与 `https://api.openai.com/v1`
 - 已配置 live provider 时，任务会走真实模型调用；如果模型调用失败，任务会标记为 `failed`，不会静默伪造结果
 - 当前 live agent 只实现第一阶段能力：单代理、受控 tool calling、结构化结果回流；还没有接入多代理、MCP、远端 worktree 或插件市场
 

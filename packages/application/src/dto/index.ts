@@ -253,6 +253,34 @@ export type AgentTaskDiagnosticsDto = {
   updatedAt: string
 }
 
+export type AgentRuntimeProviderDto = 'legacy' | 'anthropic' | 'openai-compatible'
+
+export type AgentRuntimeSettingsDto = {
+  provider: AgentRuntimeProviderDto
+  baseUrl: string
+  apiKey: string
+  model: string
+}
+
+export type AgentRuntimeSettingsStateDto = {
+  settings: AgentRuntimeSettingsDto
+  resolvedProvider: AgentRuntimeProviderDto
+  resolvedBaseUrl: string
+  resolvedModel: string
+  mode: 'legacy' | 'live'
+}
+
+export type AgentRuntimeConnectionTestResultDto = {
+  mode: 'legacy' | 'live'
+  provider: AgentRuntimeProviderDto
+  model: string
+  baseUrl: string
+  latencyMs: number
+  summary: string
+  responseText?: string
+  stopReason?: string
+}
+
 export type AgentHeaderDto = {
   currentAgent: string
   activeSubAgent?: string

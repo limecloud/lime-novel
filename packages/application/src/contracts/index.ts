@@ -1,7 +1,10 @@
 import type {
   ApplyProjectStrategyProposalInputDto,
   ApplyProjectStrategyProposalResultDto,
+  AgentRuntimeConnectionTestResultDto,
   AgentTaskDiagnosticsDto,
+  AgentRuntimeSettingsDto,
+  AgentRuntimeSettingsStateDto,
   CommitCanonCardInputDto,
   CommitCanonCardResultDto,
   CreateProjectInputDto,
@@ -65,6 +68,9 @@ export type DesktopApiContract = {
     createExportPackage: (input: CreateExportPackageInputDto) => Promise<CreateExportPackageResultDto>
   }
   agent: {
+    loadSettings: () => Promise<AgentRuntimeSettingsStateDto>
+    saveSettings: (input: AgentRuntimeSettingsDto) => Promise<AgentRuntimeSettingsStateDto>
+    testSettings: (input: AgentRuntimeSettingsDto) => Promise<AgentRuntimeConnectionTestResultDto>
     startTask: (input: StartTaskInputDto) => Promise<StartTaskResultDto>
     loadTaskDiagnostics: () => Promise<AgentTaskDiagnosticsDto[]>
     subscribeTaskEvents: (callback: (event: TaskEventDto) => void) => () => void

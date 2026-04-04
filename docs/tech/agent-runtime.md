@@ -23,11 +23,13 @@
 截至 `2026-04-03`，仓库里已经实现第一阶段可执行版本，边界如下：
 
 - 已实现
+  - `anthropic` provider 抽象（对齐 Claude / CC 的 messages + tool use 主链）
   - `openai-compatible` provider 抽象
   - 单代理 session loop
   - 工具调用编排
   - `submit_task_result` 结构化收尾
   - 与现有 `Electron IPC + TaskEventDto + AgentFeed` 协议兼容
+  - 桌面端 Agent 设置持久化与运行时注入
   - 无模型配置时自动回退到 `legacy` 规则型 runtime
 - 已接入工具
   - `load_workspace_snapshot`
@@ -52,6 +54,12 @@
 运行时通过环境变量切换：
 
 ```bash
+LIME_NOVEL_AGENT_PROVIDER=anthropic
+LIME_NOVEL_AGENT_API_KEY=...
+LIME_NOVEL_AGENT_MODEL=claude-sonnet-4-6
+```
+
+```bash
 LIME_NOVEL_AGENT_PROVIDER=openai-compatible
 LIME_NOVEL_AGENT_BASE_URL=https://api.openai.com/v1
 LIME_NOVEL_AGENT_API_KEY=...
@@ -66,8 +74,12 @@ LIME_NOVEL_AGENT_TEMPERATURE=0.2
 判定规则：
 
 - 显式设置 `LIME_NOVEL_AGENT_PROVIDER=legacy` 时，强制走旧 runtime
-- 未显式设置 provider，但存在 `BASE_URL` 或 `API_KEY` 时，自动走 `openai-compatible`
+- 显式设置 `LIME_NOVEL_AGENT_PROVIDER=anthropic` 时，走 Claude / Anthropic messages API
+- 显式设置 `LIME_NOVEL_AGENT_PROVIDER=openai-compatible` 时，走 OpenAI 兼容接口
+- 未显式设置 provider，但存在 `BASE_URL` / `API_KEY` / `MODEL` 时，会根据 `BASE_URL` 或 `MODEL` 自动推断 live provider
 - 两者都没有时，默认走 `legacy`
+
+桌面端同样支持在“工作台设置 -> AI Agent 引擎”中保存这组配置；保存后新任务立即生效，运行中的任务不被中断。
 
 ## 2. 角色模型
 

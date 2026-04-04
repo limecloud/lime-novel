@@ -7,19 +7,42 @@ import type {
   TaskEventDto
 } from '@lime-novel/application'
 import { createAgentTaskSessionSeed } from './agent-task-factory'
-import { createConfiguredLLMProvider, resolveAgentRuntimeConfig } from './live-agent-provider'
+import {
+  createConfiguredLLMProvider,
+  resolveAgentRuntimeConfig,
+  type AgentRuntimeConfig
+} from './live-agent-provider'
 import { buildFailedExecutionResult, executeLegacyAgentSession } from './legacy-agent-session'
 import { executeLiveAgentSession } from './live-agent-session'
 import { LiveAgentTaskSession } from './live-agent-task-session'
 import type { LiveAgentExecutionResult } from './live-agent-types'
 
 const MAX_CACHED_TASK_DIAGNOSTICS = 20
+type RuntimeConfigResolver = () => AgentRuntimeConfig | Promise<AgentRuntimeConfig>
+
+const buildRuntimeStartSummary = (
+  config: AgentRuntimeConfig,
+  input: StartTaskInputDto
+): string => {
+  if (config.provider === 'legacy') {
+    return `本地规则模式执行中：${input.intent}`
+  }
+
+  if (config.provider === 'anthropic') {
+    return `Claude / Anthropic（${config.model}）执行中：${input.intent}`
+  }
+
+  return `OpenAI Compatible（${config.model}）执行中：${input.intent}`
+}
 
 export class LocalAgentRuntime implements AgentRuntimePort {
   private listeners = new Set<(event: TaskEventDto) => void>()
   private diagnosticsByTaskId = new Map<string, AgentTaskDiagnosticsDto>()
 
-  constructor(private readonly getRepository: () => ProjectRepositoryPort) {}
+  constructor(
+    private readonly getRepository: () => ProjectRepositoryPort,
+    private readonly resolveRuntimeConfig: RuntimeConfigResolver = () => resolveAgentRuntimeConfig()
+  ) {}
 
   subscribe(listener: (event: TaskEventDto) => void): () => void {
     this.listeners.add(listener)
@@ -72,7 +95,8 @@ export class LocalAgentRuntime implements AgentRuntimePort {
     })
     await session.open()
 
-    const runtimeConfig = resolveAgentRuntimeConfig()
+    const runtimeConfig = await this.resolveRuntimeConfig()
+    await session.updateRunningSummary(buildRuntimeStartSummary(runtimeConfig, input))
     const provider = createConfiguredLLMProvider(runtimeConfig)
     let executionResult: LiveAgentExecutionResult
 
@@ -107,5 +131,9 @@ export class LocalAgentRuntime implements AgentRuntimePort {
 }
 
 export const createLocalAgentRuntime = (
-  getRepository: () => ProjectRepositoryPort
-): LocalAgentRuntime => new LocalAgentRuntime(getRepository)
+  getRepository: () => ProjectRepositoryPort,
+  resolveRuntimeConfig?: RuntimeConfigResolver
+): LocalAgentRuntime => new LocalAgentRuntime(getRepository, resolveRuntimeConfig)
+
+export { createConfiguredLLMProvider, resolveAgentRuntimeConfig } from './live-agent-provider'
+export type { AgentRuntimeConfig, AgentRuntimeProviderKind } from './live-agent-provider'

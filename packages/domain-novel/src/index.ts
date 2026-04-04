@@ -12,6 +12,41 @@ export type NovelAgentType = 'project' | 'chapter' | 'knowledge' | 'analysis' | 
 
 export type FeatureToolId = 'analysis'
 
+export type WorkspaceSurfaceState = {
+  surface: NovelSurfaceId
+  featureTool?: FeatureToolId
+}
+
+export const normalizeWorkspaceSurfaceState = (
+  surface: NovelSurfaceId,
+  featureTool?: FeatureToolId
+): WorkspaceSurfaceState => {
+  if (surface === 'analysis') {
+    return {
+      surface: 'feature-center',
+      featureTool: 'analysis'
+    }
+  }
+
+  return {
+    surface,
+    featureTool: surface === 'feature-center' ? featureTool : undefined
+  }
+}
+
+export const buildFeatureCenterSurfaceState = (featureTool?: FeatureToolId): WorkspaceSurfaceState => ({
+  surface: 'feature-center',
+  featureTool
+})
+
+export const resolveWorkspaceRuntimeSurface = (state: WorkspaceSurfaceState): NovelSurfaceId => {
+  if (state.surface !== 'feature-center') {
+    return state.surface
+  }
+
+  return state.featureTool === 'analysis' ? 'analysis' : 'home'
+}
+
 export type TaskStatus = 'queued' | 'running' | 'waiting_approval' | 'completed' | 'failed'
 
 export type RiskLevel = 'low' | 'medium' | 'high'

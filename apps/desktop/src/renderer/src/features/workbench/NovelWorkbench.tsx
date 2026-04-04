@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import type {
-  AnalysisOverviewDto,
-  AnalysisSampleDto,
   AgentFeedItemDto,
   AgentHeaderDto,
+  AgentRuntimeConnectionTestResultDto,
+  AgentRuntimeSettingsDto,
+  AgentRuntimeSettingsStateDto,
   AgentTaskDiagnosticsDto,
   AgentTaskDto,
   ApplyProjectStrategyProposalInputDto,
-  CanonCandidateDto,
   ChapterDocumentDto,
   ChapterListItemDto,
   CreateExportPackageInputDto,
@@ -15,8 +15,6 @@ import type {
   GenerateKnowledgeAnswerInputDto,
   GenerateKnowledgeAnswerResultDto,
   QuickActionDto,
-  RevisionIssueDto,
-  RevisionRecordDto,
   WorkspaceSearchItemDto,
   WorkspaceShellDto
 } from '@lime-novel/application'
@@ -24,9 +22,21 @@ import type { FeatureToolId, NovelSurfaceId } from '@lime-novel/domain-novel'
 import { ChapterEditor } from '../editor/ChapterEditor'
 import { AgentSidebar } from '../agent-feed/AgentSidebar'
 import type { AgentSidebarMode } from '../agent-feed/AgentSidebar'
-import { desktopApi } from '../../lib/desktop-api'
+import { AnalysisStructurePanel } from '../analysis/AnalysisStructurePanel'
+import { AnalysisSurface } from '../analysis/AnalysisSurface'
+import { useAnalysisWorkbenchState } from '../analysis/useAnalysisWorkbenchState'
 import limeLogoUrl from '../../assets/logo-lime.png'
 import { limeNovelBrand } from '../../app/branding'
+import { CanonStructurePanel } from '../canon/CanonStructurePanel'
+import { CanonSurface } from '../canon/CanonSurface'
+import { useCanonWorkbenchState } from '../canon/useCanonWorkbenchState'
+import { FeatureCenterHomeSurface } from '../feature-center/FeatureCenterHomeSurface'
+import { FeatureCenterStructurePanel } from '../feature-center/FeatureCenterStructurePanel'
+import {
+  featureCenterEntry,
+  resolveFeatureToolLabel,
+  resolveWorkspaceSearchSurfaceLabel
+} from '../feature-center/feature-center-model'
 import { KnowledgeStructurePanel } from '../knowledge/KnowledgeStructurePanel'
 import { KnowledgeSurface } from '../knowledge/KnowledgeSurface'
 import { knowledgeBucketLabel } from '../knowledge/knowledge-model'
@@ -34,9 +44,12 @@ import { useKnowledgeWorkbenchState } from '../knowledge/useKnowledgeWorkbenchSt
 import { PublishStructurePanel } from '../publish/PublishStructurePanel'
 import { PublishSurface } from '../publish/PublishSurface'
 import { usePublishWorkbenchState } from '../publish/usePublishWorkbenchState'
+import { RevisionStructurePanel } from '../revision/RevisionStructurePanel'
+import { RevisionSurface } from '../revision/RevisionSurface'
+import { useRevisionWorkbenchState } from '../revision/useRevisionWorkbenchState'
 import { WorkspaceSearchModal } from '../workspace-search/WorkspaceSearchModal'
 import { useWorkspaceSearch } from '../workspace-search/useWorkspaceSearch'
-import { formatCount, formatDateTime, summarizePath } from './workbench-format'
+import { excerptParagraphs, formatCount, formatDateTime } from './workbench-format'
 
 type AgentFeedSnapshot = {
   header: AgentHeaderDto
@@ -60,6 +73,13 @@ type NovelWorkbenchProps = {
   isApplyingAnalysisStrategy: boolean
   isCreatingExportPackage: boolean
   isGeneratingKnowledgeAnswer: boolean
+  agentSettingsState?: AgentRuntimeSettingsStateDto
+  agentSettingsError?: string
+  isAgentSettingsLoading: boolean
+  isSavingAgentSettings: boolean
+  agentSettingsTestResult?: AgentRuntimeConnectionTestResultDto
+  agentSettingsTestError?: string
+  isTestingAgentSettings: boolean
   onSurfaceChange: (surface: NovelSurfaceId) => void
   onFeatureToolChange: (tool?: FeatureToolId) => void
   onCreateProject: (input: CreateProjectInputDto) => void
@@ -78,6 +98,8 @@ type NovelWorkbenchProps = {
   onUndoRevisionRecord: (recordId: string) => void
   onCreateExportPackage: (input: CreateExportPackageInputDto) => void
   onCreateKnowledgeAnswer: (input: GenerateKnowledgeAnswerInputDto) => Promise<GenerateKnowledgeAnswerResultDto>
+  onSaveAgentSettings: (input: AgentRuntimeSettingsDto) => void
+  onTestAgentSettings: (input: AgentRuntimeSettingsDto) => void
 }
 
 type CreateProjectTemplateId = CreateProjectInputDto['template']
@@ -88,9 +110,6 @@ type CreateProjectFormState = {
   premise: string
   template: CreateProjectTemplateId
 }
-
-type CanonView = 'cards' | 'graph' | 'timeline'
-type CanonCategoryId = 'all' | 'character' | 'location' | 'rule' | 'timeline'
 
 const projectStatusLabel: Record<string, string> = {
   planning: '规划中',
@@ -131,146 +150,6 @@ const sceneStatusLabel: Record<string, string> = {
   revised: '已修订'
 }
 
-const issueSeverityLabel: Record<RevisionIssueDto['severity'], string> = {
-  low: '低优先',
-  medium: '中优先',
-  high: '高优先'
-}
-
-const issueSeverityTone: Record<RevisionIssueDto['severity'], string> = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high'
-}
-
-const surfaceLabel: Record<NovelSurfaceId, string> = {
-  home: '首页',
-  writing: '写作',
-  knowledge: '知识',
-  'feature-center': '功能中心',
-  analysis: '拆书',
-  canon: '设定',
-  revision: '修订',
-  publish: '发布'
-}
-
-const featureToolLabel: Record<FeatureToolId, string> = {
-  analysis: '拆书'
-}
-
-const featureCenterEntry = {
-  id: 'feature-center' as const,
-  label: '功能中心',
-  description: '插件式创作能力与辅助工具'
-}
-
-const resolveWorkspaceSearchSurfaceLabel = (item: WorkspaceSearchItemDto): string => {
-  if (item.surface === 'feature-center' && item.featureTool) {
-    return `${surfaceLabel[item.surface]} / ${featureToolLabel[item.featureTool]}`
-  }
-
-  return surfaceLabel[item.surface]
-}
-
-const canonCategoryDefinitions: Array<{
-  id: CanonCategoryId
-  label: string
-  match: (card: CanonCandidateDto) => boolean
-}> = [
-  {
-    id: 'all',
-    label: '全部卡片',
-    match: () => true
-  },
-  {
-    id: 'character',
-    label: '人物卡',
-    match: (card) => card.kind === 'character'
-  },
-  {
-    id: 'location',
-    label: '地点与场景',
-    match: (card) => card.kind === 'location'
-  },
-  {
-    id: 'rule',
-    label: '规则与道具',
-    match: (card) => card.kind === 'rule' || card.kind === 'item'
-  },
-  {
-    id: 'timeline',
-    label: '时间线节点',
-    match: (card) => card.kind === 'timeline-event'
-  }
-]
-
-const extractParagraphs = (content?: string): string[] =>
-  (content ?? '')
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter((block) => Boolean(block) && !block.startsWith('# '))
-
-const excerptParagraphs = (content?: string): string[] => {
-  const paragraphs = extractParagraphs(content)
-  return paragraphs.length > 0 ? paragraphs.slice(0, 4) : ['正文尚未写入，先从当前章节目标继续推进。']
-}
-
-const buildIssueEvidence = (issue: RevisionIssueDto): string[] => {
-  if (issue.title.includes('视角')) {
-    return [
-      '第 5 章：林清远第一次听见钟声时会出现耳鸣和短暂停顿。',
-      '第 8 章：她在高处会先摸口袋里的旧硬币稳定情绪。',
-      '因此当前段落至少应补一层身体反应或压抑反应。'
-    ]
-  }
-
-  if (issue.title.includes('节奏')) {
-    return [
-      '第 12 章前两段已经完成环境铺垫，再往后应更快落到动作。',
-      '相邻章节的悬念推进更依赖“选择发生”而不是继续解释。',
-      '建议压缩环境句，并把动作落点提前到门锁和旧铜味。'
-    ]
-  }
-
-  return [
-    '当前问题已命中跨章事实冲突，需要先锁定章节顺序和时间标记。',
-    '建议先以最小修订消除冲突，再决定是否扩大改动范围。',
-    '所有修订都应保留证据片段，避免后续再次回滚。'
-  ]
-}
-
-const buildRevisionPlans = (issue: RevisionIssueDto): string[] => {
-  if (issue.title.includes('视角')) {
-    return [
-      '方案 A：补耳鸣与握拳动作，改动最小、人物气质最稳。',
-      '方案 B：补一小段旧钟声回忆，解释更强但节奏更慢。'
-    ]
-  }
-
-  if (issue.title.includes('节奏')) {
-    return [
-      '方案 A：压缩环境句并提前门锁动作，优先保悬念推进。',
-      '方案 B：把心理描写拆进后两段，让节奏更平缓。'
-    ]
-  }
-
-  return [
-    '方案 A：只修正冲突事实，确保改动范围局限在当前章。',
-    '方案 B：顺带调整相邻章节表述，换取更完整的一致性。'
-  ]
-}
-
-const buildCanonTimeline = (
-  chapters: ChapterListItemDto[],
-  selectedCard?: CanonCandidateDto
-): Array<{ title: string; detail: string }> =>
-  chapters.map((chapter) => ({
-    title: `第 ${chapter.order} 章 · ${chapter.title}`,
-    detail: selectedCard
-      ? `${selectedCard.name} 与本章建立关联，可回看 ${chapter.summary}`
-      : chapter.summary
-  }))
-
 const buildDefaultCreateProjectForm = (): CreateProjectFormState => ({
   title: '',
   genre: '悬疑 / 都市奇幻',
@@ -278,12 +157,243 @@ const buildDefaultCreateProjectForm = (): CreateProjectFormState => ({
   template: 'blank'
 })
 
-const analysisScoreLabel: Record<keyof AnalysisOverviewDto['averageScores'], string> = {
-  hookStrength: '钩子',
-  characterHeat: '人物',
-  pacingMomentum: '节奏',
-  feedbackResonance: '反馈'
+const defaultAgentRuntimeSettings: AgentRuntimeSettingsDto = {
+  provider: 'legacy',
+  baseUrl: '',
+  apiKey: '',
+  model: ''
 }
+
+const runtimeProviderDefinitions: Array<{
+  id: AgentRuntimeSettingsDto['provider']
+  label: string
+  description: string
+}> = [
+  {
+    id: 'legacy',
+    label: '本地规则模式',
+    description: '不调用外部模型，继续使用当前仓库里的规则型收口与工作台回写。'
+  },
+  {
+    id: 'anthropic',
+    label: 'Claude / Anthropic',
+    description: '对齐 CC 的主链消息格式，适合把小说任务接到真实 Claude 模型。'
+  },
+  {
+    id: 'openai-compatible',
+    label: 'OpenAI Compatible',
+    description: '兼容 OpenAI 接口风格，也可接入 OneAPI、网关或兼容代理。'
+  }
+]
+
+const runtimeProviderLabel: Record<AgentRuntimeSettingsStateDto['resolvedProvider'], string> = {
+  legacy: '本地规则模式',
+  anthropic: 'Claude / Anthropic',
+  'openai-compatible': 'OpenAI Compatible'
+}
+
+const runtimeTestProviderLabel: Record<AgentRuntimeConnectionTestResultDto['provider'], string> = {
+  legacy: '本地规则模式',
+  anthropic: 'Claude / Anthropic',
+  'openai-compatible': 'OpenAI Compatible'
+}
+
+const agentSidebarModeDefinitions: Array<{
+  id: AgentSidebarMode
+  label: string
+  description: string
+}> = [
+  {
+    id: 'agent',
+    label: '代理',
+    description: '查看当前主代理、后台任务和运行轨迹。'
+  },
+  {
+    id: 'suggestions',
+    label: '建议',
+    description: '查看提议、证据和审批结果。'
+  },
+  {
+    id: 'dialogue',
+    label: '对话',
+    description: '查看实时 trace，并继续发起对话。'
+  }
+]
+
+const trimAgentRuntimeSettings = (settings: AgentRuntimeSettingsDto): AgentRuntimeSettingsDto => ({
+  provider: settings.provider,
+  baseUrl: settings.baseUrl.trim(),
+  apiKey: settings.apiKey.trim(),
+  model: settings.model.trim()
+})
+
+const isSameAgentRuntimeSettings = (
+  left: AgentRuntimeSettingsDto,
+  right: AgentRuntimeSettingsDto
+): boolean => {
+  const normalizedLeft = trimAgentRuntimeSettings(left)
+  const normalizedRight = trimAgentRuntimeSettings(right)
+
+  return (
+    normalizedLeft.provider === normalizedRight.provider &&
+    normalizedLeft.baseUrl === normalizedRight.baseUrl &&
+    normalizedLeft.apiKey === normalizedRight.apiKey &&
+    normalizedLeft.model === normalizedRight.model
+  )
+}
+
+const resolveRuntimeModelPlaceholder = (provider: AgentRuntimeSettingsDto['provider']): string =>
+  provider === 'anthropic' ? '留空则默认 claude-sonnet-4-6' : provider === 'openai-compatible' ? '留空则默认 gpt-4.1-mini' : '本地规则模式不需要模型'
+
+const resolveRuntimeBaseUrlPlaceholder = (provider: AgentRuntimeSettingsDto['provider']): string =>
+  provider === 'anthropic'
+    ? '留空则默认 https://api.anthropic.com/v1/messages'
+    : provider === 'openai-compatible'
+      ? '留空则默认 https://api.openai.com/v1'
+      : '本地规则模式不需要网关地址'
+
+const AgentSidebarRailIcon = ({
+  mode
+}: {
+  mode: AgentSidebarMode
+}) => {
+  if (mode === 'agent') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="4.75" y="5.25" width="14.5" height="13.5" rx="4" {...iconStrokeProps} />
+        <circle cx="9" cy="10.25" r="1" {...iconStrokeProps} />
+        <circle cx="15" cy="10.25" r="1" {...iconStrokeProps} />
+        <path d="M8.25 15c1 .85 2.28 1.25 3.75 1.25S14.75 15.85 15.75 15" {...iconStrokeProps} />
+      </svg>
+    )
+  }
+
+  if (mode === 'suggestions') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M8 10.25a4 4 0 1 1 8 0c0 1.55-.68 2.35-1.55 3.25-.72.74-1.2 1.45-1.2 2.25h-2.5c0-.8-.47-1.5-1.2-2.25-.87-.9-1.55-1.7-1.55-3.25Z" {...iconStrokeProps} />
+        <path d="M10 18.25h4" {...iconStrokeProps} />
+        <path d="M10.5 20.25h3" {...iconStrokeProps} />
+      </svg>
+    )
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M7 8.25h10" {...iconStrokeProps} />
+      <path d="M7 12h6.5" {...iconStrokeProps} />
+      <path d="M7 15.75h8.5" {...iconStrokeProps} />
+      <path d="M17.25 7.5 20 10.25l-2.75 2.75" {...iconStrokeProps} />
+    </svg>
+  )
+}
+
+const ExpandSidebarIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M7.25 5.5v13" {...iconStrokeProps} />
+    <path d="M16.5 7.25 11.75 12l4.75 4.75" {...iconStrokeProps} />
+  </svg>
+)
+
+const CollapseStructureIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M16.75 5.5v13" {...iconStrokeProps} />
+    <path d="M7.5 7.25 12.25 12 7.5 16.75" {...iconStrokeProps} />
+  </svg>
+)
+
+const ExpandStructureIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M7.25 5.5v13" {...iconStrokeProps} />
+    <path d="M16.5 7.25 11.75 12l4.75 4.75" {...iconStrokeProps} />
+  </svg>
+)
+
+const StructurePanelRail = ({
+  className,
+  surface,
+  onExpand
+}: {
+  className?: string
+  surface: NovelSurfaceId
+  onExpand: () => void
+}) => (
+  <aside className={className ? `structure-panel-rail ${className}` : 'structure-panel-rail'} aria-label="左侧结构面板折叠导航">
+    <button
+      type="button"
+      className="structure-panel-rail__button"
+      onClick={onExpand}
+      aria-label="展开左侧导航"
+      title="展开左侧导航"
+    >
+      <span className="structure-panel-rail__icon">
+        <ExpandStructureIcon />
+      </span>
+    </button>
+    <button
+      type="button"
+      className="structure-panel-rail__button structure-panel-rail__button--active"
+      onClick={onExpand}
+      aria-label="展开当前结构导航"
+      title="展开当前结构导航"
+    >
+      <span className="structure-panel-rail__icon">
+        <SurfaceIcon surface={surface} />
+      </span>
+    </button>
+  </aside>
+)
+
+const AgentSidebarRail = ({
+  className,
+  mode,
+  onModeChange,
+  onExpand
+}: {
+  className?: string
+  mode: AgentSidebarMode
+  onModeChange: (mode: AgentSidebarMode) => void
+  onExpand: () => void
+}) => (
+  <aside className={className ? `agent-sidebar-rail ${className}` : 'agent-sidebar-rail'} aria-label="AI Agent 侧栏折叠导航">
+    <button
+      type="button"
+      className="agent-sidebar-rail__button agent-sidebar-rail__button--icon"
+      onClick={onExpand}
+      aria-label="展开右侧栏"
+      title="展开右侧栏"
+    >
+      <span className="agent-sidebar-rail__icon">
+        <ExpandSidebarIcon />
+      </span>
+    </button>
+
+    <div className="agent-sidebar-rail__modes">
+      {agentSidebarModeDefinitions.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={
+            item.id === mode
+              ? 'agent-sidebar-rail__button agent-sidebar-rail__button--active'
+              : 'agent-sidebar-rail__button'
+          }
+          aria-label={`${item.label}，${item.description}`}
+          title={`${item.label} · ${item.description}`}
+          aria-pressed={item.id === mode}
+          onClick={() => {
+            onModeChange(item.id)
+            onExpand()
+          }}
+        >
+          <span className="agent-sidebar-rail__icon">
+            <AgentSidebarRailIcon mode={item.id} />
+          </span>
+        </button>
+      ))}
+    </div>
+  </aside>
+)
 
 const iconStrokeProps = {
   stroke: 'currentColor',
@@ -463,126 +573,362 @@ const CreateProjectModal = ({
 const SettingsModal = ({
   shell,
   activityLabel,
+  agentSettingsState,
+  agentSettingsError,
+  isLoadingSettings,
+  isSavingSettings,
+  agentSettingsTestResult,
+  agentSettingsTestError,
+  isTestingAgentSettings,
+  onSaveAgentSettings,
+  onTestAgentSettings,
   onClose,
   onOpenProject,
   onGoPublish
 }: {
   shell: WorkspaceShellDto
   activityLabel: string
+  agentSettingsState?: AgentRuntimeSettingsStateDto
+  agentSettingsError?: string
+  isLoadingSettings: boolean
+  isSavingSettings: boolean
+  agentSettingsTestResult?: AgentRuntimeConnectionTestResultDto
+  agentSettingsTestError?: string
+  isTestingAgentSettings: boolean
+  onSaveAgentSettings: (input: AgentRuntimeSettingsDto) => void
+  onTestAgentSettings: (input: AgentRuntimeSettingsDto) => void
   onClose: () => void
   onOpenProject: () => void
   onGoPublish: () => void
-}) => (
-  <div className="modal-overlay" role="presentation" onClick={onClose}>
-    <div
-      className="modal-card settings-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label="工作台设置"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="modal-card__header">
-        <div className="settings-modal__identity">
-          <div className="settings-avatar" aria-hidden="true">
-            <img className="brand-mark settings-avatar__mark" src={limeLogoUrl} alt="" />
-          </div>
-          <div>
-            <span className="eyebrow">设置与账户</span>
-            <h2>工作台设置</h2>
-            <p>这里会承接后续登录头像与账户入口。当前先集中放项目、工作区和常用动作。</p>
-          </div>
-        </div>
-        <button type="button" className="ghost-button" onClick={onClose}>
-          关闭
-        </button>
-      </div>
+}) => {
+  const [form, setForm] = useState<AgentRuntimeSettingsDto>(agentSettingsState?.settings ?? defaultAgentRuntimeSettings)
 
-      <div className="surface-grid surface-grid--two settings-modal__grid">
-        <section className="surface-card settings-modal__section">
-          <span className="eyebrow">账户入口</span>
-          <h3>{limeNovelBrand.name}</h3>
-          <p>{limeNovelBrand.descriptor}</p>
-          <div className="detail-list">
-            <div className="detail-list__item">
-              <strong>当前模式</strong>
-              <span>本地创作模式，后续这里会切换为登录用户头像与账户信息。</span>
+  useEffect(() => {
+    if (agentSettingsState) {
+      setForm(agentSettingsState.settings)
+    }
+  }, [agentSettingsState])
+
+  const currentSettings = agentSettingsState?.settings ?? defaultAgentRuntimeSettings
+  const trimmedForm = trimAgentRuntimeSettings(form)
+  const hasUnsavedChanges = !isSameAgentRuntimeSettings(form, currentSettings)
+  const selectedProvider = runtimeProviderDefinitions.find((item) => item.id === form.provider) ?? runtimeProviderDefinitions[0]
+
+  return (
+    <div className="modal-overlay" role="presentation" onClick={onClose}>
+      <div
+        className="modal-card settings-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="工作台设置"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-card__header">
+          <div className="settings-modal__identity">
+            <div className="settings-avatar" aria-hidden="true">
+              <img className="brand-mark settings-avatar__mark" src={limeLogoUrl} alt="" />
             </div>
-            <div className="detail-list__item">
-              <strong>产品口号</strong>
-              <span>{limeNovelBrand.slogan}</span>
+            <div>
+              <span className="eyebrow">设置与账户</span>
+              <h2>工作台设置</h2>
+              <p>项目信息保留在这里，AI Agent 引擎现在也会在这里直接接到真实模型。</p>
             </div>
           </div>
+          <button type="button" className="ghost-button" onClick={onClose}>
+            关闭
+          </button>
+        </div>
+
+        <div className="surface-grid surface-grid--two settings-modal__grid">
+          <section className="surface-card settings-modal__section">
+            <span className="eyebrow">账户入口</span>
+            <h3>{limeNovelBrand.name}</h3>
+            <p>{limeNovelBrand.descriptor}</p>
+            <div className="detail-list">
+              <div className="detail-list__item">
+                <strong>当前模式</strong>
+                <span>本地桌面创作模式，账号层后续再接入；当前优先把小说 Agent 主链跑通。</span>
+              </div>
+              <div className="detail-list__item">
+                <strong>产品口号</strong>
+                <span>{limeNovelBrand.slogan}</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="surface-card settings-modal__section">
+            <span className="eyebrow">当前项目</span>
+            <h3>{shell.project.title}</h3>
+            <p>{shell.project.subtitle}</p>
+            <div className="detail-list">
+              <div className="detail-list__item">
+                <strong>题材</strong>
+                <span>{shell.project.genre}</span>
+              </div>
+              <div className="detail-list__item">
+                <strong>阶段</strong>
+                <span>{projectStatusLabel[shell.project.status] ?? shell.project.status}</span>
+              </div>
+              <div className="detail-list__item">
+                <strong>工作区目录</strong>
+                <span className="settings-modal__path" title={shell.workspacePath}>
+                  {shell.workspacePath}
+                </span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section className="surface-card settings-modal__section">
+          <div className="surface-card__header">
+            <div>
+              <span className="eyebrow">AI Agent 引擎</span>
+              <h3>真实模型接入</h3>
+            </div>
+            <span className="status-chip">{agentSettingsState ? runtimeProviderLabel[agentSettingsState.resolvedProvider] : '加载中'}</span>
+          </div>
+          <p className="settings-modal__hint">保存后只影响新发起的任务，当前正在运行的代理不会被中断。</p>
+
+          {isLoadingSettings ? (
+            <div className="agent-empty-state">
+              <strong>正在加载 Agent 配置</strong>
+              <p>模型提供商、默认模型和网关入口正在接入设置面板。</p>
+            </div>
+          ) : agentSettingsError ? (
+            <div className="agent-runtime-card__failure">
+              <strong>Agent 设置读取失败</strong>
+              <p>{agentSettingsError}</p>
+            </div>
+          ) : (
+            <>
+              <div className="detail-list detail-list--compact">
+                <div className="detail-list__item">
+                  <strong>当前生效模式</strong>
+                  <span>{agentSettingsState?.mode === 'legacy' ? '规则型本地收口' : '实时模型执行'}</span>
+                </div>
+                <div className="detail-list__item">
+                  <strong>当前 Provider</strong>
+                  <span>{agentSettingsState ? runtimeProviderLabel[agentSettingsState.resolvedProvider] : '未设置'}</span>
+                </div>
+                <div className="detail-list__item">
+                  <strong>当前模型</strong>
+                  <span>{agentSettingsState?.resolvedModel ?? '未设置'}</span>
+                </div>
+                <div className="detail-list__item">
+                  <strong>当前入口</strong>
+                  <span className="settings-modal__path" title={agentSettingsState?.resolvedBaseUrl}>
+                    {agentSettingsState?.resolvedBaseUrl || '本地规则模式无需网关地址'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="settings-runtime-grid">
+                <label className="field-stack">
+                  <span>运行模式</span>
+                  <select
+                    value={form.provider}
+                    disabled={isSavingSettings}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        provider: event.target.value as AgentRuntimeSettingsDto['provider']
+                      })
+                    }
+                  >
+                    {runtimeProviderDefinitions.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {form.provider !== 'legacy' ? (
+                  <label className="field-stack">
+                    <span>API Key</span>
+                    <input
+                      type="password"
+                      value={form.apiKey}
+                      onChange={(event) => setForm({ ...form, apiKey: event.target.value })}
+                      placeholder="直接填平台 API Key，或填自建网关对应凭证"
+                      disabled={isSavingSettings}
+                    />
+                  </label>
+                ) : null}
+              </div>
+
+              <div className="supporting-note">{selectedProvider.description}</div>
+
+              {form.provider !== 'legacy' ? (
+                <>
+                  <div className="settings-runtime-grid">
+                    <label className="field-stack">
+                      <span>模型 ID（可选）</span>
+                      <input
+                        value={form.model}
+                        onChange={(event) => setForm({ ...form, model: event.target.value })}
+                        placeholder={resolveRuntimeModelPlaceholder(form.provider)}
+                        disabled={isSavingSettings}
+                      />
+                    </label>
+                    <label className="field-stack">
+                      <span>Base URL（可选）</span>
+                      <input
+                        value={form.baseUrl}
+                        onChange={(event) => setForm({ ...form, baseUrl: event.target.value })}
+                        placeholder={resolveRuntimeBaseUrlPlaceholder(form.provider)}
+                        disabled={isSavingSettings}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="supporting-note">
+                    留空时会自动使用当前 provider 的默认模型与默认入口，这样更接近 CC 的开箱体验；只有你在走代理网关或兼容平台时，才需要手动填写。
+                  </div>
+                </>
+              ) : (
+                <div className="supporting-note">
+                  当前不会调用任何外部模型。之前保存过的 API Key、模型和网关地址会被保留，切回实时模式即可继续使用。
+                </div>
+              )}
+
+              <div className="detail-list detail-list--compact">
+                <div className="detail-list__item">
+                  <strong>连接测试</strong>
+                  <span>测试只验证当前表单配置的连通性，不会自动保存设置。</span>
+                </div>
+              </div>
+
+              {agentSettingsTestError ? (
+                <div className="agent-runtime-card__failure">
+                  <strong>连接测试失败</strong>
+                  <p>{agentSettingsTestError}</p>
+                </div>
+              ) : null}
+
+              {agentSettingsTestResult ? (
+                <article className="agent-runtime-card">
+                  <div className="agent-runtime-card__meta">
+                    <div>
+                      <strong>最近一次测试结果</strong>
+                      <p>{agentSettingsTestResult.summary}</p>
+                    </div>
+                    <span className="agent-runtime-card__time">{agentSettingsTestResult.latencyMs}ms</span>
+                  </div>
+                  <div className="detail-list detail-list--compact">
+                    <div className="detail-list__item">
+                      <strong>Provider</strong>
+                      <span>{runtimeTestProviderLabel[agentSettingsTestResult.provider]}</span>
+                    </div>
+                    <div className="detail-list__item">
+                      <strong>模型</strong>
+                      <span>{agentSettingsTestResult.model}</span>
+                    </div>
+                    <div className="detail-list__item">
+                      <strong>入口</strong>
+                      <span className="settings-modal__path" title={agentSettingsTestResult.baseUrl}>
+                        {agentSettingsTestResult.baseUrl || '本地规则模式无需网关地址'}
+                      </span>
+                    </div>
+                    {agentSettingsTestResult.stopReason ? (
+                      <div className="detail-list__item">
+                        <strong>停止原因</strong>
+                        <span>{agentSettingsTestResult.stopReason}</span>
+                      </div>
+                    ) : null}
+                    {agentSettingsTestResult.responseText ? (
+                      <div className="detail-list__item">
+                        <strong>响应内容</strong>
+                        <span>{agentSettingsTestResult.responseText}</span>
+                      </div>
+                    ) : null}
+                    {hasUnsavedChanges ? (
+                      <div className="detail-list__item">
+                        <strong>结果提示</strong>
+                        <span>当前表单又有新的未保存改动，最近一次测试结果可能已经过期。</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              ) : null}
+
+              <div className="hero-actions settings-modal__actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isSavingSettings || isTestingAgentSettings || isLoadingSettings}
+                  onClick={() => onTestAgentSettings(trimmedForm)}
+                >
+                  {isTestingAgentSettings ? '正在测试连接...' : '测试当前配置'}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isSavingSettings || !hasUnsavedChanges}
+                  onClick={() => setForm(currentSettings)}
+                >
+                  恢复已保存
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={isSavingSettings || !hasUnsavedChanges}
+                  onClick={() => onSaveAgentSettings(trimmedForm)}
+                >
+                  {isSavingSettings ? '正在保存 Agent 设置...' : '保存 Agent 设置'}
+                </button>
+              </div>
+            </>
+          )}
         </section>
 
         <section className="surface-card settings-modal__section">
-          <span className="eyebrow">当前项目</span>
-          <h3>{shell.project.title}</h3>
-          <p>{shell.project.subtitle}</p>
+          <div className="surface-card__header">
+            <div>
+              <span className="eyebrow">快捷动作</span>
+              <h3>工作区与发布入口</h3>
+            </div>
+          </div>
           <div className="detail-list">
             <div className="detail-list__item">
-              <strong>题材</strong>
-              <span>{shell.project.genre}</span>
+              <strong>当前状态</strong>
+              <span>{activityLabel}</span>
             </div>
             <div className="detail-list__item">
-              <strong>阶段</strong>
-              <span>{projectStatusLabel[shell.project.status] ?? shell.project.status}</span>
+              <strong>最近章节</strong>
+              <span>{shell.project.currentChapterId ?? '尚未定位章节'}</span>
             </div>
-            <div className="detail-list__item">
-              <strong>工作区目录</strong>
-              <span className="settings-modal__path" title={shell.workspacePath}>
-                {shell.workspacePath}
-              </span>
-            </div>
+          </div>
+          <div className="hero-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                onOpenProject()
+                onClose()
+              }}
+            >
+              打开项目
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                onGoPublish()
+                onClose()
+              }}
+            >
+              进入发布
+            </button>
+            <button type="button" className="primary-button" onClick={onClose}>
+              返回工作台
+            </button>
           </div>
         </section>
       </div>
-
-      <section className="surface-card settings-modal__section">
-        <div className="surface-card__header">
-          <div>
-            <span className="eyebrow">快捷动作</span>
-            <h3>工作区与发布入口</h3>
-          </div>
-        </div>
-        <div className="detail-list">
-          <div className="detail-list__item">
-            <strong>当前状态</strong>
-            <span>{activityLabel}</span>
-          </div>
-          <div className="detail-list__item">
-            <strong>最近章节</strong>
-            <span>{shell.project.currentChapterId ?? '尚未定位章节'}</span>
-          </div>
-        </div>
-        <div className="hero-actions">
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => {
-              onOpenProject()
-              onClose()
-            }}
-          >
-            打开项目
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => {
-              onGoPublish()
-              onClose()
-            }}
-          >
-            进入发布
-          </button>
-          <button type="button" className="primary-button" onClick={onClose}>
-            返回工作台
-          </button>
-        </div>
-      </section>
     </div>
-  </div>
-)
+  )
+}
 
 const HomeSurface = ({
   shell,
@@ -966,422 +1312,6 @@ const WritingSurface = ({
   )
 }
 
-const CanonSurface = ({
-  shell,
-  canonView,
-  onCanonViewChange,
-  selectedCategory,
-  onCategoryChange,
-  selectedCardId,
-  onSelectCard,
-  onStartTask,
-  onCommitCanonCard
-}: {
-  shell: WorkspaceShellDto
-  canonView: CanonView
-  onCanonViewChange: (view: CanonView) => void
-  selectedCategory: CanonCategoryId
-  onCategoryChange: (category: CanonCategoryId) => void
-  selectedCardId?: string
-  onSelectCard: (cardId: string) => void
-  onStartTask: (intent: string) => void
-  onCommitCanonCard: (cardId: string, visibility: 'candidate' | 'confirmed' | 'archived') => void
-}) => {
-  const visibleCards = shell.canonCandidates.filter((card) =>
-    canonCategoryDefinitions.find((item) => item.id === selectedCategory)?.match(card) ?? true
-  )
-  const selectedCard =
-    visibleCards.find((card) => card.cardId === selectedCardId) ??
-    shell.canonCandidates.find((card) => card.cardId === selectedCardId) ??
-    visibleCards[0]
-
-  const timeline = buildCanonTimeline(shell.chapterTree, selectedCard)
-
-  return (
-    <div className="surface-stack">
-      <section className="surface-hero surface-hero--canon">
-        <div className="surface-hero__main">
-          <span className="eyebrow">项目长期记忆</span>
-          <h1>角色、规则与时间线</h1>
-          <p>设定工作面不是后台管理页，而是小说项目长期一致性的前台。</p>
-        </div>
-        <div className="segmented-switch">
-          <button
-            className={canonView === 'cards' ? 'pill-button pill-button--active' : 'pill-button'}
-            onClick={() => onCanonViewChange('cards')}
-          >
-            列表
-          </button>
-          <button
-            className={canonView === 'graph' ? 'pill-button pill-button--active' : 'pill-button'}
-            onClick={() => onCanonViewChange('graph')}
-          >
-            关系图
-          </button>
-          <button
-            className={canonView === 'timeline' ? 'pill-button pill-button--active' : 'pill-button'}
-            onClick={() => onCanonViewChange('timeline')}
-          >
-            时间线
-          </button>
-        </div>
-      </section>
-
-      <section className="filter-bar">
-        {canonCategoryDefinitions.map((category) => {
-          const count = shell.canonCandidates.filter((card) => category.match(card)).length
-          return (
-            <button
-              key={category.id}
-              className={category.id === selectedCategory ? 'filter-chip filter-chip--active' : 'filter-chip'}
-              onClick={() => onCategoryChange(category.id)}
-            >
-              {category.label}
-              <span>{count}</span>
-            </button>
-          )
-        })}
-      </section>
-
-      {canonView === 'cards' ? (
-        <div className="surface-grid surface-grid--three">
-          {visibleCards.length > 0 ? (
-            visibleCards.map((card) => (
-              <button
-                key={card.cardId}
-                className={card.cardId === selectedCard?.cardId ? 'surface-card surface-card--selectable is-active' : 'surface-card surface-card--selectable'}
-                onClick={() => onSelectCard(card.cardId)}
-              >
-                <span className="eyebrow">{card.kind}</span>
-                <h3>{card.name}</h3>
-                <p>{card.summary}</p>
-                <div className="supporting-note">{card.evidence}</div>
-              </button>
-            ))
-          ) : (
-            <article className="surface-card surface-card--empty">
-              <span className="eyebrow">当前分类为空</span>
-              <h3>还没有沉淀到这类设定</h3>
-              <p>可以先从正文继续抽卡，或让设定代理为这个分类起一版草案。</p>
-              <div className="hero-actions">
-                <button className="primary-button" onClick={() => onStartTask('请从当前章节里提取地点、规则或时间线设定。')}>
-                  继续抽卡
-                </button>
-              </div>
-            </article>
-          )}
-        </div>
-      ) : null}
-
-      <div className="surface-grid surface-grid--two">
-        <article className="surface-card surface-card--graph">
-          <div className="surface-card__header">
-            <span className="eyebrow">{canonView === 'timeline' ? '时间线' : '关系与引用'}</span>
-            <button className="inline-link" onClick={() => onStartTask('请继续追踪当前设定卡的引用范围与冲突边界。')}>
-              继续追问
-            </button>
-          </div>
-
-          {canonView === 'timeline' ? (
-            <div className="timeline-board">
-              {timeline.map((item) => (
-                <div key={item.title} className="timeline-item">
-                  <div className="timeline-item__dot" />
-                  <div>
-                    <strong>{item.title}</strong>
-                    <p>{item.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="relationship-board">
-              <div className="relationship-node relationship-node--primary">
-                <strong>{selectedCard?.name ?? '当前卡片'}</strong>
-                <span>{selectedCard?.summary ?? '等待选择一张设定卡。'}</span>
-              </div>
-              <div className="relationship-node relationship-node--secondary">
-                <strong>{shell.canonCandidates[0]?.name ?? '角色卡'}</strong>
-                <span>最近引用：第 12 章</span>
-              </div>
-              <div className="relationship-node relationship-node--accent">
-                <strong>{shell.chapterTree[1]?.title ?? '当前章节'}</strong>
-                <span>承接主线推进</span>
-              </div>
-            </div>
-          )}
-        </article>
-
-        <article className="surface-card">
-          <div className="surface-card__header">
-            <span className="eyebrow">当前卡片详情</span>
-            <span className={`status-chip ${selectedCard?.visibility === 'confirmed' ? '' : 'status-chip--muted'}`}>
-              {selectedCard?.visibility === 'confirmed' ? '已确认' : '候选中'}
-            </span>
-          </div>
-          <h2>{selectedCard?.name ?? '尚未选择设定卡'}</h2>
-          <p>{selectedCard?.summary ?? '请选择左侧的一张设定卡查看引用范围与持续影响。'}</p>
-          <div className="detail-list">
-            <div className="detail-list__item">
-              <strong>命中证据</strong>
-              <span>{selectedCard?.evidence ?? '等待证据'}</span>
-            </div>
-            <div className="detail-list__item">
-              <strong>建议动作</strong>
-              <span>写入候选卡、升级为高频可见、标记连续性风险。</span>
-            </div>
-            <div className="detail-list__item">
-              <strong>影响范围</strong>
-              <span>第二卷主线、章节推进、角色状态同步。</span>
-            </div>
-          </div>
-          <div className="hero-actions">
-            <button
-              className="primary-button"
-              onClick={() => selectedCard && onCommitCanonCard(selectedCard.cardId, 'confirmed')}
-            >
-              写回正式设定
-            </button>
-            <button
-              className="ghost-button"
-              onClick={() => selectedCard && onCommitCanonCard(selectedCard.cardId, 'archived')}
-            >
-              归档此卡
-            </button>
-          </div>
-        </article>
-      </div>
-    </div>
-  )
-}
-
-const RevisionSurface = ({
-  issue,
-  revisionRecords,
-  proposal,
-  chapterDocument,
-  onStartTask,
-  onApplyProposal,
-  onRejectProposal,
-  onUpdateIssue,
-  onUndoRevisionRecord
-}: {
-  issue?: RevisionIssueDto
-  revisionRecords: RevisionRecordDto[]
-  proposal?: AgentFeedItemDto
-  chapterDocument?: ChapterDocumentDto
-  onStartTask: (intent: string) => void
-  onApplyProposal: (proposalId: string) => void
-  onRejectProposal: (proposalId: string) => void
-  onUpdateIssue: (issueId: string, status: 'open' | 'deferred' | 'resolved') => void
-  onUndoRevisionRecord: (recordId: string) => void
-}) => {
-  const paragraphs = excerptParagraphs(chapterDocument?.content)
-  const evidence = issue ? buildIssueEvidence(issue) : []
-  const plans = issue ? buildRevisionPlans(issue) : []
-  const pendingProposal = proposal?.approvalStatus === 'pending' ? proposal : undefined
-  const visibleRevisionRecords = [...revisionRecords].sort((left, right) => {
-    const score = (item: RevisionRecordDto): number => {
-      if (item.linkedIssueId && item.linkedIssueId === issue?.issueId) {
-        return 0
-      }
-
-      if (item.chapterId === issue?.chapterId) {
-        return 1
-      }
-
-      return 2
-    }
-
-    return score(left) - score(right)
-  })
-
-  return (
-    <div className="surface-stack">
-      <section className="surface-hero surface-hero--revision">
-        <div className="surface-hero__meta-bar">
-          <span>问题定位：{issue ? `第 ${issue.chapterId.replace('chapter-', '')} 章` : '等待选择问题'}</span>
-          <span>类型：人物 / 节奏 / POV / 语言</span>
-          <span>来源：自动诊断 + 证据回溯</span>
-          <span>记录：{revisionRecords.length} 条</span>
-        </div>
-        <div className="surface-hero__main">
-          <span className="eyebrow">问题处理流</span>
-          <h1>{issue?.title ?? '选择一个修订问题'}</h1>
-          <p>{issue?.summary ?? '每个问题都必须能定位、应用、延后、忽略，并保留证据来源。'}</p>
-        </div>
-      </section>
-
-      <div className="surface-grid surface-grid--two">
-        <article className="surface-card surface-card--excerpt">
-          <div className="surface-card__header">
-            <span className="eyebrow">问题命中片段</span>
-            {issue ? (
-              <span className={`severity-badge severity-badge--${issueSeverityTone[issue.severity]}`}>
-                {issueSeverityLabel[issue.severity]}
-              </span>
-            ) : null}
-          </div>
-          <div className="serif-snippets">
-            {paragraphs.slice(0, 2).map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-          </div>
-          <div className="callout callout--issue">
-            {issue?.summary ?? '选择左侧问题队列中的一项后，这里会定位原文并高亮影响范围。'}
-          </div>
-          <div className="serif-snippets">
-            {paragraphs.slice(2, 4).map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-          </div>
-        </article>
-
-        <article className="surface-card">
-          <div className="surface-card__header">
-            <span className="eyebrow">证据与方案</span>
-            <button className="inline-link" onClick={() => onStartTask(`请解释为什么“${issue?.title ?? '当前问题'}”应优先处理。`)}>
-              查看推理链
-            </button>
-          </div>
-          <div className="stacked-notes">
-            {evidence.map((item) => (
-              <div key={item} className="stacked-note">
-                <p>{item}</p>
-              </div>
-            ))}
-          </div>
-          <div className="plan-list">
-            {plans.map((plan) => (
-              <div key={plan} className="plan-list__item">
-                <strong>{plan}</strong>
-              </div>
-            ))}
-          </div>
-          {pendingProposal ? (
-            <div className="stacked-note">
-              <strong>{pendingProposal.title}</strong>
-              <p>{pendingProposal.body}</p>
-            </div>
-          ) : (
-            <div className="callout callout--issue">
-              当前还没有可直接应用的修订方案。你可以先生成一版最小修订，再决定是否接受。
-            </div>
-          )}
-          <div className="hero-actions">
-            <button
-              className="primary-button"
-              onClick={() => {
-                if (pendingProposal?.proposalId) {
-                  onApplyProposal(pendingProposal.proposalId)
-                  return
-                }
-
-                if (!issue) {
-                  onStartTask('请针对当前问题生成最小修订方案。')
-                  return
-                }
-
-                onStartTask(`请针对“${issue.title}”生成最小修订方案，并保留证据。`)
-              }}
-            >
-              {pendingProposal ? '应用方案 A' : '生成方案 A'}
-            </button>
-            <button
-              className="ghost-button"
-              onClick={() => onStartTask(`请针对“${issue?.title ?? '当前问题'}”再来一版更克制的方案。`)}
-            >
-              再来一版
-            </button>
-            {pendingProposal?.proposalId ? (
-              <button
-                className="ghost-button"
-                onClick={() => pendingProposal.proposalId && onRejectProposal(pendingProposal.proposalId)}
-              >
-                拒绝当前提议
-              </button>
-            ) : null}
-            <button
-              className="ghost-button"
-              onClick={() => issue && onUpdateIssue(issue.issueId, issue.status === 'deferred' ? 'open' : 'deferred')}
-            >
-              {issue?.status === 'deferred' ? '重新打开' : '稍后处理'}
-            </button>
-          </div>
-        </article>
-      </div>
-
-      <article className="surface-card">
-        <div className="surface-card__header">
-          <div>
-            <span className="eyebrow">修订记录</span>
-            <h3>最近应用与撤销</h3>
-          </div>
-          <span className="status-chip">{revisionRecords.length} 条记录</span>
-        </div>
-
-        {visibleRevisionRecords.length > 0 ? (
-          <div className="revision-record-list">
-            {visibleRevisionRecords.map((record) => (
-              <div key={record.recordId} className="revision-record-item">
-                <div className="revision-record-item__header">
-                  <div>
-                    <strong>{record.title}</strong>
-                    <span>
-                      {record.chapterTitle} · {formatDateTime(record.createdAt)}
-                    </span>
-                  </div>
-                  <div className="revision-record-item__actions">
-                    <span className={record.status === 'undone' ? 'status-chip status-chip--muted' : 'status-chip'}>
-                      {record.status === 'undone' ? '已撤销' : '已应用'}
-                    </span>
-                    <button
-                      className="ghost-button"
-                      disabled={!record.canUndo}
-                      onClick={() => onUndoRevisionRecord(record.recordId)}
-                    >
-                      撤销这次修订
-                    </button>
-                  </div>
-                </div>
-
-                <p>{record.summary}</p>
-
-                <div className="revision-record-item__diff">
-                  <div className="revision-record-item__panel">
-                    <span>应用前</span>
-                    <p>{record.beforePreview}</p>
-                  </div>
-                  <div className="revision-record-item__panel">
-                    <span>应用后</span>
-                    <p>{record.afterPreview}</p>
-                  </div>
-                </div>
-
-                <div className="revision-record-item__footer">
-                  <span>{summarizePath(record.snapshotPath)}</span>
-                  {record.status === 'undone' && record.undoneAt ? (
-                    <span>撤销于 {formatDateTime(record.undoneAt)}</span>
-                  ) : record.canUndo ? (
-                    <span>当前正文仍与这次应用保持一致，可直接撤销。</span>
-                  ) : (
-                    <span>当前正文已经继续编辑，需先手动比较差异后再撤销。</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <strong>还没有修订记录</strong>
-            <span>当你接受修订代理的方案后，这里会保留可追溯、可撤销的项目级记录。</span>
-          </div>
-        )}
-      </article>
-    </div>
-  )
-}
-
 const HomeStructurePanel = ({
   shell,
   activeChapter,
@@ -1433,7 +1363,7 @@ const HomeStructurePanel = ({
     <div className="structure-panel__section">
       <span className="eyebrow">待处理结果</span>
       <button className="panel-list-button" onClick={() => onSurfaceChange('feature-center')}>
-        <strong>功能中心 / 拆书</strong>
+        <strong>{`${featureCenterEntry.label} / ${resolveFeatureToolLabel('analysis')}`}</strong>
         <span>{shell.analysisSamples.length > 0 ? `${shell.analysisSamples.length} 个样本可继续对标` : '先导入爆款样本开始建模'}</span>
       </button>
       <button className="panel-list-button" onClick={() => onSurfaceChange('canon')}>
@@ -1509,469 +1439,6 @@ const WritingStructurePanel = ({
   </div>
 )
 
-const CanonStructurePanel = ({
-  shell,
-  selectedCategory,
-  onCategoryChange,
-  onStartTask
-}: {
-  shell: WorkspaceShellDto
-  selectedCategory: CanonCategoryId
-  onCategoryChange: (category: CanonCategoryId) => void
-  onStartTask: (intent: string) => void
-}) => (
-  <div className="structure-panel__content">
-    <div className="structure-panel__section">
-      <span className="eyebrow">设定分类</span>
-      <button
-        className="structure-button structure-button--primary"
-        onClick={() => onStartTask('请按当前项目世界观，为我创建一张新的设定卡草案。')}
-      >
-        + 新建卡片
-      </button>
-    </div>
-
-    <div className="structure-panel__section">
-      {canonCategoryDefinitions.slice(1).map((category) => {
-        const count = shell.canonCandidates.filter((card) => category.match(card)).length
-        return (
-          <button
-            key={category.id}
-            className={category.id === selectedCategory ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
-            onClick={() => onCategoryChange(category.id)}
-          >
-            <strong>{category.label}</strong>
-            <span>{count} 张卡片</span>
-          </button>
-        )
-      })}
-    </div>
-  </div>
-)
-
-const RevisionStructurePanel = ({
-  issues,
-  selectedIssueId,
-  onSelectIssue,
-  onInspectIssueChapter
-}: {
-  issues: RevisionIssueDto[]
-  selectedIssueId?: string
-  onSelectIssue: (issueId: string) => void
-  onInspectIssueChapter: (chapterId: string) => void
-}) => (
-  <div className="structure-panel__content">
-    <div className="structure-panel__section">
-      <span className="eyebrow">问题队列</span>
-      {issues.map((issue) => (
-        <button
-          key={issue.issueId}
-          className={issue.issueId === selectedIssueId ? 'panel-list-button panel-list-button--active panel-list-button--issue' : 'panel-list-button panel-list-button--issue'}
-          onClick={() => {
-            onSelectIssue(issue.issueId)
-            onInspectIssueChapter(issue.chapterId)
-          }}
-        >
-          <strong>{issueSeverityLabel[issue.severity]} · {issue.title}</strong>
-          <span>
-            {issue.summary}
-            {issue.status === 'deferred' ? ' · 已稍后处理' : ''}
-          </span>
-        </button>
-      ))}
-    </div>
-
-    <div className="structure-panel__section">
-      <span className="eyebrow">筛选</span>
-      <div className="panel-note">
-        <strong>范围</strong>
-        <span>当前章 / 当前卷 / 全书</span>
-      </div>
-      <div className="panel-note">
-        <strong>类型</strong>
-        <span>人物 / 节奏 / POV / 语言</span>
-      </div>
-      <div className="panel-note">
-        <strong>来源</strong>
-        <span>自动诊断 / 手动标记 / 反馈导入</span>
-      </div>
-    </div>
-  </div>
-)
-
-const FeatureCenterStructurePanel = ({
-  shell,
-  activeFeatureTool,
-  onFeatureToolChange
-}: {
-  shell: WorkspaceShellDto
-  activeFeatureTool?: FeatureToolId
-  onFeatureToolChange: (tool?: FeatureToolId) => void
-}) => (
-  <div className="structure-panel__content">
-    <div className="structure-panel__section">
-      <span className="eyebrow">功能列表</span>
-      <button
-        className={activeFeatureTool === 'analysis' ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
-        onClick={() => onFeatureToolChange('analysis')}
-      >
-        <strong>拆书</strong>
-        <span>{shell.analysisSamples.length > 0 ? `${shell.analysisSamples.length} 个样本已导入` : '导入 TXT / Markdown 自动开始拆解'}</span>
-      </button>
-    </div>
-
-    <div className="structure-panel__section">
-      <span className="eyebrow">接入方式</span>
-      <div className="panel-note">
-        <strong>文件直接导入</strong>
-        <span>不需要手填标题、作者和评论，导入后会从文件名和正文自动推断样本信息。</span>
-      </div>
-      <div className="panel-note">
-        <strong>支持格式</strong>
-        <span>`.txt`、`.md`、`.markdown`</span>
-      </div>
-    </div>
-  </div>
-)
-
-const AnalysisStructurePanel = ({
-  overview,
-  samples,
-  selectedSampleId,
-  onSelectSample,
-  onCreateSampleRequest,
-  isImporting
-}: {
-  overview: AnalysisOverviewDto
-  samples: AnalysisSampleDto[]
-  selectedSampleId?: string
-  onSelectSample: (sampleId: string) => void
-  onCreateSampleRequest: () => void
-  isImporting: boolean
-}) => (
-  <div className="structure-panel__content">
-    <div className="structure-panel__section">
-      <span className="eyebrow">拆书样本</span>
-      <button className="structure-button structure-button--primary" onClick={onCreateSampleRequest} disabled={isImporting}>
-        + 导入 TXT / Markdown
-      </button>
-    </div>
-
-    <div className="structure-panel__section">
-      <span className="eyebrow">样本列表</span>
-      {samples.length > 0 ? (
-        samples.map((sample) => (
-          <button
-            key={sample.sampleId}
-            className={sample.sampleId === selectedSampleId ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
-            onClick={() => onSelectSample(sample.sampleId)}
-          >
-            <strong>{sample.title}</strong>
-            <span>{sample.tags.slice(0, 2).join(' / ') || sample.sourceLabel} · {sample.comments.length} 条评论</span>
-          </button>
-        ))
-      ) : (
-        <div className="panel-note">
-          <strong>还没有拆书样本</strong>
-          <span>先导入一个 `.txt` 或 `.md` 文件，工作台才会开始建立参考模型。</span>
-        </div>
-      )}
-    </div>
-
-    <div className="structure-panel__section">
-      <span className="eyebrow">聚合趋势</span>
-      <div className="panel-note">
-        <strong>{overview.sampleCount} 个样本</strong>
-        <span>{overview.dominantTags.join(' / ') || '等待首个题材标签'}</span>
-      </div>
-      <div className="panel-note">
-        <strong>当前启发</strong>
-        <span>{overview.projectAngles[0] ?? '导入后会自动生成立项启发。'}</span>
-      </div>
-    </div>
-  </div>
-)
-
-const FeatureCenterHomeSurface = ({
-  shell,
-  onFeatureToolChange
-}: {
-  shell: WorkspaceShellDto
-  onFeatureToolChange: (tool?: FeatureToolId) => void
-}) => (
-  <div className="surface-stack">
-    <section className="surface-hero surface-hero--feature-center">
-      <div className="surface-hero__main">
-        <span className="eyebrow">功能中心</span>
-        <h1>把辅助能力集中收进一个独立入口</h1>
-        <p>这里专门放插件式工具，不和首页、写作、设定、修订、发布混在一起。当前第一个功能就是拆书。</p>
-        <div className="hero-metrics">
-          <span>已启用功能 1 个</span>
-          <span>拆书样本 {shell.analysisSamples.length}</span>
-          <span>支持导入 TXT / Markdown</span>
-        </div>
-      </div>
-    </section>
-
-    <div className="surface-grid surface-grid--two">
-      <button className="surface-card surface-card--selectable feature-tool-card" onClick={() => onFeatureToolChange('analysis')}>
-        <div className="feature-tool-card__meta">
-          <span className="eyebrow">第一个功能</span>
-          <strong>拆书</strong>
-        </div>
-        <p>导入 `.txt`、`.md` 或 `.markdown` 文件，自动拆钩子、人物吸引力、节奏和风险信号，不需要手填一堆字段。</p>
-        <div className="detail-list detail-list--compact">
-          <div className="detail-list__item">
-            <strong>当前状态</strong>
-            <span>{shell.analysisSamples.length > 0 ? `${shell.analysisSamples.length} 个样本可继续对标` : '等待首个样本文件'}</span>
-          </div>
-          <div className="detail-list__item">
-            <strong>默认流程</strong>
-            <span>{'导入文件 -> 自动建模 -> 选择性回写项目'}</span>
-          </div>
-        </div>
-      </button>
-
-      <article className="surface-card">
-        <span className="eyebrow">当前接入方式</span>
-        <h2>直接导入文本文件</h2>
-        <div className="detail-list">
-          <div className="detail-list__item">
-            <strong>支持格式</strong>
-            <span>`.txt`、`.md`、`.markdown`</span>
-          </div>
-          <div className="detail-list__item">
-            <strong>自动推断</strong>
-            <span>标题、摘要和题材信号会从文件名与正文内容里自动生成。</span>
-          </div>
-          <div className="detail-list__item">
-            <strong>回写策略</strong>
-            <span>只把值得保留的结论回写到首页高亮、快捷动作和候选设定卡。</span>
-          </div>
-        </div>
-      </article>
-    </div>
-  </div>
-)
-
-const AnalysisSurface = ({
-  shell,
-  overview,
-  sample,
-  isApplyingStrategy,
-  onCreateSampleRequest,
-  onApplyProjectStrategyProposal,
-  onStartTask
-}: {
-  shell: WorkspaceShellDto
-  overview: AnalysisOverviewDto
-  sample?: AnalysisSampleDto
-  isApplyingStrategy: boolean
-  onCreateSampleRequest: () => void
-  onApplyProjectStrategyProposal: (sampleId: string) => void
-  onStartTask: (intent: string, surface?: NovelSurfaceId) => void
-}) => (
-  <div className="surface-stack">
-    <section className="surface-hero surface-hero--analysis">
-      <div className="surface-hero__main">
-        <span className="eyebrow">写前拆书建模</span>
-        <h1>爆款样本、读者信号与项目启发</h1>
-        <p>先把爆款样本拆成钩子、人物、节奏和评论信号，再决定哪些结论值得回写到当前项目。</p>
-        <div className="hero-actions">
-          <button className="primary-button" onClick={onCreateSampleRequest}>
-            导入 TXT / Markdown
-          </button>
-          {sample ? (
-            <button
-              className="ghost-button"
-              onClick={() =>
-                onStartTask(
-                  `请基于样本《${sample.title}》为《${shell.project.title}》生成一版立项启发，聚焦卖点、人物吸引点和开篇钩子。`,
-                  'analysis'
-                )
-              }
-            >
-              让拆书代理补一版启发
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="hero-metrics analysis-hero-metrics">
-        {Object.entries(overview.averageScores).map(([key, value]) => (
-          <div key={key} className="hero-metric">
-            <span>{analysisScoreLabel[key as keyof AnalysisOverviewDto['averageScores']]}</span>
-            <strong>{value}</strong>
-          </div>
-        ))}
-      </div>
-    </section>
-
-    {sample ? (
-      <>
-        <div className="surface-grid surface-grid--two-large">
-          <article className="surface-card surface-card--focus">
-            <div className="surface-card__header">
-              <div>
-                <span className="eyebrow">样本概览</span>
-                <h2>{sample.title}</h2>
-              </div>
-              <span className="status-pill status-pill--muted">{sample.sourceLabel}</span>
-            </div>
-            <div className="detail-list">
-              <div className="detail-list__item">
-                <strong>作者 / 来源</strong>
-                <span>{sample.author} · {formatDateTime(sample.importedAt)}</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>题材标签</strong>
-                <span>{sample.tags.join(' / ') || '未补标签'}</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>一句话样本</strong>
-                <span>{sample.synopsis}</span>
-              </div>
-            </div>
-            <div className="analysis-sample-excerpt">
-              {sample.excerpt.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
-              ))}
-            </div>
-          </article>
-
-          <article className="surface-card">
-            <div className="surface-card__header">
-              <div>
-                <span className="eyebrow">本项目启发</span>
-                <h2>先借鉴什么，不照搬什么</h2>
-              </div>
-            </div>
-            <div className="analysis-signal-list">
-              {sample.inspirationSignals.map((signal) => (
-                <div key={signal} className="analysis-signal-list__item">
-                  <strong>启发</strong>
-                  <span>{signal}</span>
-                </div>
-              ))}
-            </div>
-            <div className="hero-actions">
-              <button
-                className="primary-button"
-                onClick={() => onApplyProjectStrategyProposal(sample.sampleId)}
-                disabled={isApplyingStrategy}
-              >
-                {isApplyingStrategy ? '正在回写...' : '回写到项目'}
-              </button>
-              <button
-                className="ghost-button"
-                onClick={() =>
-                  onStartTask(`请比较《${sample.title}》与《${shell.project.title}》在卖点与节奏上的差距。`, 'analysis')
-                }
-              >
-                生成对标建议
-              </button>
-            </div>
-          </article>
-        </div>
-
-        <section className="surface-grid surface-grid--three">
-          <article className="surface-card">
-            <span className="eyebrow">爆点拆解</span>
-            <h3>钩子与题材承诺</h3>
-            <p>{sample.hookSummary}</p>
-            <div className="analysis-tag-row">
-              {sample.tags.map((tag) => (
-                <span key={tag} className="memory-chip">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </article>
-
-          <article className="surface-card">
-            <span className="eyebrow">人物吸引力</span>
-            <h3>记忆点与关系张力</h3>
-            <p>{sample.characterSummary}</p>
-            <div className="detail-list detail-list--compact">
-              <div className="detail-list__item">
-                <strong>人物热度</strong>
-                <span>{sample.scores.characterHeat} / 10</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>反馈热度</strong>
-                <span>{sample.scores.feedbackResonance} / 10</span>
-              </div>
-            </div>
-          </article>
-
-          <article className="surface-card">
-            <span className="eyebrow">节奏结构</span>
-            <h3>冲突、回合与尾钩</h3>
-            <p>{sample.pacingSummary}</p>
-            <div className="detail-list detail-list--compact">
-              <div className="detail-list__item">
-                <strong>钩子分</strong>
-                <span>{sample.scores.hookStrength} / 10</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>节奏分</strong>
-                <span>{sample.scores.pacingMomentum} / 10</span>
-              </div>
-            </div>
-          </article>
-        </section>
-
-        <div className="surface-grid surface-grid--two">
-          <article className="surface-card">
-            <div className="surface-card__header">
-              <div>
-                <span className="eyebrow">读者反馈</span>
-                <h3>评论高频买点</h3>
-              </div>
-              <span className="status-pill status-pill--muted">{sample.comments.length} 条评论</span>
-            </div>
-            <div className="analysis-signal-list">
-              {sample.readerSignals.map((signal) => (
-                <div key={signal} className="analysis-signal-list__item">
-                  <strong>买点</strong>
-                  <span>{signal}</span>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className="surface-card">
-            <div className="surface-card__header">
-              <div>
-                <span className="eyebrow">风险提醒</span>
-                <h3>哪些地方不能照搬</h3>
-              </div>
-            </div>
-            <div className="analysis-signal-list">
-              {sample.riskSignals.map((signal) => (
-                <div key={signal} className="analysis-signal-list__item analysis-signal-list__item--warning">
-                  <strong>风险</strong>
-                  <span>{signal}</span>
-                </div>
-              ))}
-            </div>
-          </article>
-        </div>
-      </>
-    ) : (
-      <article className="surface-card surface-card--empty">
-        <div className="empty-state">
-          <strong>还没有拆书样本</strong>
-          <span>先导入一个 `.txt` 或 `.md` 样本文件，工作台会自动从文件名和正文里建立拆书结果。</span>
-          <button className="primary-button" onClick={onCreateSampleRequest}>
-            立即导入文件
-          </button>
-        </div>
-      </article>
-    )}
-  </div>
-)
-
 export const NovelWorkbench = ({
   shell,
   chapterDocument,
@@ -1987,6 +1454,14 @@ export const NovelWorkbench = ({
   isApplyingAnalysisStrategy,
   isCreatingExportPackage,
   isGeneratingKnowledgeAnswer,
+  agentSettingsState,
+  agentSettingsError,
+  isAgentSettingsLoading,
+  isSavingAgentSettings,
+  agentSettingsTestResult,
+  agentSettingsTestError,
+  isTestingAgentSettings,
+  onTestAgentSettings,
   onSurfaceChange,
   onFeatureToolChange,
   onCreateProject,
@@ -2004,50 +1479,35 @@ export const NovelWorkbench = ({
   onUpdateRevisionIssue,
   onUndoRevisionRecord,
   onCreateExportPackage,
-  onCreateKnowledgeAnswer
+  onCreateKnowledgeAnswer,
+  onSaveAgentSettings
 }: NovelWorkbenchProps) => {
   const activeChapterId = currentChapterId ?? chapterDocument?.chapterId ?? shell.project.currentChapterId
   const activeChapter =
     shell.chapterTree.find((chapter) => chapter.chapterId === activeChapterId) ?? shell.chapterTree[0]
 
   const [selectedSceneId, setSelectedSceneId] = useState(shell.sceneList[0]?.sceneId)
-  const [selectedAnalysisSampleId, setSelectedAnalysisSampleId] = useState(shell.analysisSamples[0]?.sampleId)
-  const [canonView, setCanonView] = useState<CanonView>('cards')
-  const [selectedCanonCategory, setSelectedCanonCategory] = useState<CanonCategoryId>('all')
-  const [selectedCanonCardId, setSelectedCanonCardId] = useState(shell.canonCandidates[0]?.cardId)
-  const [selectedIssueId, setSelectedIssueId] = useState(shell.revisionIssues[0]?.issueId)
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false)
   const [isCreateProjectModalOpen, setCreateProjectModalOpen] = useState(false)
   const [isFocusMode, setFocusMode] = useState(false)
+  const [isStructurePanelCollapsed, setStructurePanelCollapsed] = useState(false)
+  const [isAgentSidebarCollapsed, setAgentSidebarCollapsed] = useState(false)
   const [createProjectForm, setCreateProjectForm] = useState<CreateProjectFormState>(buildDefaultCreateProjectForm)
   const isAnalysisToolActive = activeSurface === 'feature-center' && activeFeatureTool === 'analysis'
+  const analysis = useAnalysisWorkbenchState(shell)
+  const canon = useCanonWorkbenchState(shell)
   const knowledge = useKnowledgeWorkbenchState(shell)
+  const revision = useRevisionWorkbenchState(shell, feedState.feed)
   const publish = usePublishWorkbenchState(shell, feedState.feed)
   const workspaceSearch = useWorkspaceSearch(shell.workspacePath)
+  const agentRuntimeMode = agentSettingsState?.mode ?? 'legacy'
+  const agentRuntimeLabel = agentSettingsState ? runtimeProviderLabel[agentSettingsState.resolvedProvider] : '本地规则模式'
 
   useEffect(() => {
     if (!shell.sceneList.some((scene) => scene.sceneId === selectedSceneId)) {
       setSelectedSceneId(shell.sceneList[0]?.sceneId)
     }
   }, [selectedSceneId, shell.sceneList])
-
-  useEffect(() => {
-    if (!shell.analysisSamples.some((sample) => sample.sampleId === selectedAnalysisSampleId)) {
-      setSelectedAnalysisSampleId(shell.analysisSamples[0]?.sampleId)
-    }
-  }, [selectedAnalysisSampleId, shell.analysisSamples])
-
-  useEffect(() => {
-    if (!shell.canonCandidates.some((card) => card.cardId === selectedCanonCardId)) {
-      setSelectedCanonCardId(shell.canonCandidates[0]?.cardId)
-    }
-  }, [selectedCanonCardId, shell.canonCandidates])
-
-  useEffect(() => {
-    if (!shell.revisionIssues.some((issue) => issue.issueId === selectedIssueId)) {
-      setSelectedIssueId(shell.revisionIssues[0]?.issueId)
-    }
-  }, [selectedIssueId, shell.revisionIssues])
 
   useEffect(() => {
     if (!isCreatingProject) {
@@ -2076,31 +1536,13 @@ export const NovelWorkbench = ({
     }
   }, [isFocusMode, workspaceSearch.isOpen])
 
-  const selectedIssue =
-    shell.revisionIssues.find((issue) => issue.issueId === selectedIssueId) ?? shell.revisionIssues[0]
-  const selectedAnalysisSample =
-    shell.analysisSamples.find((sample) => sample.sampleId === selectedAnalysisSampleId) ?? shell.analysisSamples[0]
-  const selectedRevisionProposal =
-    feedState.feed.find(
-      (item) =>
-        item.kind === 'proposal' &&
-        Boolean(item.proposalId) &&
-        item.linkedIssueId === selectedIssue?.issueId &&
-        item.approvalStatus === 'pending'
-    ) ??
-    feedState.feed.find(
-      (item) =>
-        item.kind === 'proposal' &&
-        Boolean(item.proposalId) &&
-        item.approvalStatus === 'pending'
-    )
   const chapterStatusSummary = (() => {
     if (isAnalysisToolActive) {
       return `拆书 · ${shell.analysisSamples.length} 个样本`
     }
 
     if (activeSurface === 'feature-center') {
-      return activeFeatureTool ? featureToolLabel[activeFeatureTool] : '功能中心'
+      return resolveFeatureToolLabel(activeFeatureTool)
     }
 
     if (activeSurface === 'knowledge') {
@@ -2118,17 +1560,17 @@ export const NovelWorkbench = ({
   const statusBarContextLabel =
     activeSurface === 'feature-center' ? '当前功能' : activeSurface === 'knowledge' ? '当前知识页' : '当前章节'
   const visibleQuickActions: QuickActionDto[] =
-    isAnalysisToolActive && selectedAnalysisSample
+    isAnalysisToolActive && analysis.selectedSample
       ? [
           {
-            id: `analysis-quick-hook-${selectedAnalysisSample.sampleId}`,
+            id: `analysis-quick-hook-${analysis.selectedSample.sampleId}`,
             label: '拆开篇钩子',
-            prompt: `请拆一下样本《${selectedAnalysisSample.title}》的开篇钩子和章节承诺。`
+            prompt: `请拆一下样本《${analysis.selectedSample.title}》的开篇钩子和章节承诺。`
           },
           {
-            id: `analysis-quick-strategy-${selectedAnalysisSample.sampleId}`,
+            id: `analysis-quick-strategy-${analysis.selectedSample.sampleId}`,
             label: '生成立项启发',
-            prompt: `请基于样本《${selectedAnalysisSample.title}》为《${shell.project.title}》生成一版立项启发。`
+            prompt: `请基于样本《${analysis.selectedSample.title}》为《${shell.project.title}》生成一版立项启发。`
           }
         ]
       : activeSurface === 'knowledge'
@@ -2155,6 +1597,8 @@ export const NovelWorkbench = ({
   const gridClass = [
     'workspace-grid',
     activeSurface === 'writing' ? 'workspace-grid--writing' : '',
+    !isFocusMode && isStructurePanelCollapsed ? 'workspace-grid--structure-collapsed' : '',
+    !isFocusMode && isAgentSidebarCollapsed ? 'workspace-grid--agent-collapsed' : '',
     isFocusMode ? 'workspace-grid--focus' : ''
   ]
     .filter(Boolean)
@@ -2179,6 +1623,20 @@ export const NovelWorkbench = ({
   const handleOpenPublishConfirm = (): void => {
     ensurePublishSurface()
     publish.onOpenConfirm()
+  }
+
+  const handleSelectRevisionIssue = (issueId: string, inspectChapter = true): void => {
+    revision.onSelectIssue(issueId)
+
+    if (!inspectChapter) {
+      return
+    }
+
+    const issue = shell.revisionIssues.find((item) => item.issueId === issueId)
+
+    if (issue) {
+      onInspectRevisionIssueChapter(issue.chapterId)
+    }
   }
 
   const handleSearchSelect = (item: WorkspaceSearchItemDto): void => {
@@ -2210,7 +1668,7 @@ export const NovelWorkbench = ({
       }
 
       if (item.featureTool === 'analysis' && item.entityId) {
-        setSelectedAnalysisSampleId(item.entityId)
+        analysis.onSelectSample(item.entityId)
       }
 
       return
@@ -2219,7 +1677,7 @@ export const NovelWorkbench = ({
     if (item.surface === 'analysis') {
       onFeatureToolChange('analysis')
       if (item.entityId) {
-        setSelectedAnalysisSampleId(item.entityId)
+        analysis.onSelectSample(item.entityId)
       }
       return
     }
@@ -2227,7 +1685,7 @@ export const NovelWorkbench = ({
     if (item.surface === 'canon') {
       onSurfaceChange('canon')
       if (item.entityId) {
-        setSelectedCanonCardId(item.entityId)
+        canon.onSelectCard(item.entityId)
       }
       return
     }
@@ -2242,12 +1700,12 @@ export const NovelWorkbench = ({
 
     if (item.surface === 'revision') {
       if (item.entityId) {
-        setSelectedIssueId(item.entityId)
+        handleSelectRevisionIssue(item.entityId, Boolean(item.chapterId))
       }
 
-      if (item.chapterId) {
+      if (item.chapterId && !item.entityId) {
         onInspectRevisionIssueChapter(item.chapterId)
-      } else {
+      } else if (!item.chapterId) {
         onSurfaceChange('revision')
       }
       return
@@ -2304,234 +1762,264 @@ export const NovelWorkbench = ({
         </div>
       </header>
 
-      <div className={gridClass}>
-        <nav className="nav-rail">
-          <div className="nav-rail__group">
-            {shell.navigation.map((item) => (
+      <div className="workspace-stage">
+        <div className={gridClass}>
+          <nav className="nav-rail">
+            <div className="nav-rail__group">
+              {shell.navigation.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-surface={item.id}
+                  className={item.id === activeSurface ? 'nav-button nav-button--active' : 'nav-button'}
+                  onClick={() => onSurfaceChange(item.id)}
+                  aria-label={`${item.label}，${item.description}`}
+                  title={`${item.label} · ${item.description}`}
+                >
+                  <span className="nav-button__glyph" aria-hidden="true">
+                    <SurfaceIcon surface={item.id} />
+                  </span>
+                  <span className="nav-button__tooltip" role="tooltip">
+                    <strong>{item.label}</strong>
+                    <span>{item.description}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="nav-rail__footer">
               <button
-                key={item.id}
                 type="button"
-                data-surface={item.id}
-                className={item.id === activeSurface ? 'nav-button nav-button--active' : 'nav-button'}
-                onClick={() => onSurfaceChange(item.id)}
-                aria-label={`${item.label}，${item.description}`}
-                title={`${item.label} · ${item.description}`}
+                data-surface={featureCenterEntry.id}
+                className={activeSurface === 'feature-center' ? 'nav-button nav-button--active' : 'nav-button'}
+                onClick={() => onSurfaceChange('feature-center')}
+                aria-label={`${featureCenterEntry.label}，${featureCenterEntry.description}`}
+                title={`${featureCenterEntry.label} · ${featureCenterEntry.description}`}
               >
                 <span className="nav-button__glyph" aria-hidden="true">
-                  <SurfaceIcon surface={item.id} />
+                  <SurfaceIcon surface={featureCenterEntry.id} />
                 </span>
                 <span className="nav-button__tooltip" role="tooltip">
-                  <strong>{item.label}</strong>
-                  <span>{item.description}</span>
+                  <strong>{featureCenterEntry.label}</strong>
+                  <span>{featureCenterEntry.description}</span>
                 </span>
               </button>
-            ))}
-          </div>
+            </div>
+          </nav>
 
-          <div className="nav-rail__footer">
-            <button
-              type="button"
-              data-surface={featureCenterEntry.id}
-              className={activeSurface === 'feature-center' ? 'nav-button nav-button--active' : 'nav-button'}
-              onClick={() => onSurfaceChange('feature-center')}
-              aria-label={`${featureCenterEntry.label}，${featureCenterEntry.description}`}
-              title={`${featureCenterEntry.label} · ${featureCenterEntry.description}`}
-            >
-              <span className="nav-button__glyph" aria-hidden="true">
-                <SurfaceIcon surface={featureCenterEntry.id} />
-              </span>
-              <span className="nav-button__tooltip" role="tooltip">
-                <strong>{featureCenterEntry.label}</strong>
-                <span>{featureCenterEntry.description}</span>
-              </span>
-            </button>
-          </div>
-        </nav>
+          {!isFocusMode ? (
+            isStructurePanelCollapsed ? (
+              <StructurePanelRail
+                className={activeSurface === 'writing' ? 'structure-panel-rail--writing' : undefined}
+                surface={activeSurface}
+                onExpand={() => setStructurePanelCollapsed(false)}
+              />
+            ) : (
+              <aside className={activeSurface === 'writing' ? 'structure-panel structure-panel--writing' : 'structure-panel'}>
+                <div className="structure-panel__toolbar">
+                  <button
+                    type="button"
+                    className="ghost-button structure-panel__collapse"
+                    onClick={() => setStructurePanelCollapsed(true)}
+                    aria-label="折叠左侧导航"
+                    title="折叠左侧导航"
+                  >
+                    <span className="structure-panel__collapse-icon" aria-hidden="true">
+                      <CollapseStructureIcon />
+                    </span>
+                  </button>
+                </div>
+                {activeSurface === 'home' ? (
+                  <HomeStructurePanel
+                    shell={shell}
+                    activeChapter={activeChapter}
+                    onSurfaceChange={onSurfaceChange}
+                    onCreateProjectRequest={() => setCreateProjectModalOpen(true)}
+                    onSelectChapter={onSelectChapter}
+                    onOpenProject={onOpenProject}
+                    isCreatingProject={isCreatingProject}
+                  />
+                ) : null}
+                {activeSurface === 'writing' ? (
+                  <WritingStructurePanel
+                    shell={shell}
+                    chapterId={activeChapterId}
+                    selectedSceneId={selectedSceneId}
+                    onSelectChapter={onSelectChapter}
+                    onSelectScene={setSelectedSceneId}
+                    onStartTask={onStartTask}
+                  />
+                ) : null}
+                {activeSurface === 'knowledge' ? (
+                  <KnowledgeStructurePanel
+                    shell={shell}
+                    selectedBucket={knowledge.selectedBucket}
+                    selectedDocumentPath={knowledge.selectedDocumentPath}
+                    visibleDocuments={knowledge.visibleDocuments}
+                    onBucketChange={knowledge.onBucketChange}
+                    onSelectDocument={knowledge.onSelectDocument}
+                  />
+                ) : null}
+                {activeSurface === 'feature-center' && !activeFeatureTool ? (
+                  <FeatureCenterStructurePanel
+                    shell={shell}
+                    activeFeatureTool={activeFeatureTool}
+                    onFeatureToolChange={onFeatureToolChange}
+                  />
+                ) : null}
+                {isAnalysisToolActive ? (
+                  <AnalysisStructurePanel
+                    overview={shell.analysisOverview}
+                    samples={shell.analysisSamples}
+                    selectedSampleId={analysis.selectedSampleId}
+                    onSelectSample={analysis.onSelectSample}
+                    onCreateSampleRequest={onImportAnalysisSample}
+                    isImporting={isImportingAnalysisSample}
+                  />
+                ) : null}
+                {activeSurface === 'canon' ? (
+                  <CanonStructurePanel
+                    shell={shell}
+                    selectedCategory={canon.selectedCategory}
+                    onCategoryChange={canon.onCategoryChange}
+                    onStartTask={onStartTask}
+                  />
+                ) : null}
+                {activeSurface === 'revision' ? (
+                  <RevisionStructurePanel
+                    issues={shell.revisionIssues}
+                    selectedIssueId={revision.selectedIssueId}
+                    onSelectIssue={handleSelectRevisionIssue}
+                  />
+                ) : null}
+                {activeSurface === 'publish' ? (
+                  <PublishStructurePanel
+                    shell={shell}
+                    selectedPresetId={publish.selectedPresetId}
+                    onSelectPreset={publish.onSelectPreset}
+                  />
+                ) : null}
+              </aside>
+            )
+          ) : null}
 
-        {!isFocusMode ? (
-          <aside className={activeSurface === 'writing' ? 'structure-panel structure-panel--writing' : 'structure-panel'}>
-          {activeSurface === 'home' ? (
-            <HomeStructurePanel
-              shell={shell}
-              activeChapter={activeChapter}
-              onSurfaceChange={onSurfaceChange}
-              onCreateProjectRequest={() => setCreateProjectModalOpen(true)}
-              onSelectChapter={onSelectChapter}
-              onOpenProject={onOpenProject}
-              isCreatingProject={isCreatingProject}
-            />
-          ) : null}
-          {activeSurface === 'writing' ? (
-            <WritingStructurePanel
-              shell={shell}
-              chapterId={activeChapterId}
-              selectedSceneId={selectedSceneId}
-              onSelectChapter={onSelectChapter}
-              onSelectScene={setSelectedSceneId}
-              onStartTask={onStartTask}
-            />
-          ) : null}
-          {activeSurface === 'knowledge' ? (
-            <KnowledgeStructurePanel
-              shell={shell}
-              selectedBucket={knowledge.selectedBucket}
-              selectedDocumentPath={knowledge.selectedDocumentPath}
-              visibleDocuments={knowledge.visibleDocuments}
-              onBucketChange={knowledge.onBucketChange}
-              onSelectDocument={knowledge.onSelectDocument}
-            />
-          ) : null}
-          {activeSurface === 'feature-center' && !activeFeatureTool ? (
-            <FeatureCenterStructurePanel
-              shell={shell}
-              activeFeatureTool={activeFeatureTool}
-              onFeatureToolChange={onFeatureToolChange}
-            />
-          ) : null}
-          {isAnalysisToolActive ? (
-            <AnalysisStructurePanel
-              overview={shell.analysisOverview}
-              samples={shell.analysisSamples}
-              selectedSampleId={selectedAnalysisSample?.sampleId}
-              onSelectSample={setSelectedAnalysisSampleId}
-              onCreateSampleRequest={onImportAnalysisSample}
-              isImporting={isImportingAnalysisSample}
-            />
-          ) : null}
-          {activeSurface === 'canon' ? (
-            <CanonStructurePanel
-              shell={shell}
-              selectedCategory={selectedCanonCategory}
-              onCategoryChange={setSelectedCanonCategory}
-              onStartTask={onStartTask}
-            />
-          ) : null}
-          {activeSurface === 'revision' ? (
-            <RevisionStructurePanel
-              issues={shell.revisionIssues}
-              selectedIssueId={selectedIssue?.issueId}
-              onSelectIssue={setSelectedIssueId}
-              onInspectIssueChapter={onInspectRevisionIssueChapter}
-            />
-          ) : null}
-          {activeSurface === 'publish' ? (
-            <PublishStructurePanel
-              shell={shell}
-              selectedPresetId={publish.selectedPresetId}
-              onSelectPreset={publish.onSelectPreset}
-            />
-          ) : null}
-          </aside>
-        ) : null}
+          <main className={activeSurface === 'writing' ? 'main-surface main-surface--writing' : 'main-surface'}>
+            {activeSurface === 'home' ? (
+              <HomeSurface
+                shell={shell}
+                activeChapter={activeChapter}
+                feedState={feedState}
+                onSurfaceChange={onSurfaceChange}
+                onCreateProjectRequest={() => setCreateProjectModalOpen(true)}
+                onSelectChapter={onSelectChapter}
+                onStartTask={onStartTask}
+              />
+            ) : null}
+            {activeSurface === 'writing' ? (
+              <WritingSurface
+                shell={shell}
+                chapterDocument={chapterDocument}
+                selectedSceneId={selectedSceneId}
+                onSelectScene={setSelectedSceneId}
+                onStartTask={onStartTask}
+                onSaveChapter={onSaveChapter}
+              />
+            ) : null}
+            {activeSurface === 'knowledge' ? (
+              <KnowledgeSurface
+                shell={shell}
+                visibleDocuments={knowledge.visibleDocuments}
+                selectedBucket={knowledge.selectedBucket}
+                onBucketChange={knowledge.onBucketChange}
+                selectedDocumentPath={knowledge.selectedDocumentPath}
+                selectedDocumentMetadata={knowledge.selectedDocumentMetadata}
+                selectedDocument={knowledge.selectedDocument}
+                isDocumentLoading={knowledge.isKnowledgeDocumentLoading}
+                documentError={knowledge.knowledgeDocumentError}
+                onSelectDocument={knowledge.onSelectDocument}
+                onStartTask={onStartTask}
+                onCreateKnowledgeAnswer={onCreateKnowledgeAnswer}
+                isGeneratingAnswer={isGeneratingKnowledgeAnswer}
+              />
+            ) : null}
+            {activeSurface === 'feature-center' && !activeFeatureTool ? (
+              <FeatureCenterHomeSurface shell={shell} onFeatureToolChange={onFeatureToolChange} />
+            ) : null}
+            {isAnalysisToolActive ? (
+              <AnalysisSurface
+                shell={shell}
+                overview={shell.analysisOverview}
+                sample={analysis.selectedSample}
+                isApplyingStrategy={isApplyingAnalysisStrategy}
+                onCreateSampleRequest={onImportAnalysisSample}
+                onApplyProjectStrategyProposal={(sampleId) => onApplyProjectStrategyProposal({ sampleId })}
+                onStartTask={onStartTask}
+              />
+            ) : null}
+            {activeSurface === 'canon' ? (
+              <CanonSurface
+                shell={shell}
+                canon={canon}
+                onStartTask={onStartTask}
+                onCommitCanonCard={onCommitCanonCard}
+              />
+            ) : null}
+            {activeSurface === 'revision' ? (
+              <RevisionSurface
+                issue={revision.selectedIssue}
+                revisionRecords={revision.visibleRevisionRecords}
+                proposal={revision.selectedProposal}
+                chapterDocument={chapterDocument}
+                onStartTask={onStartTask}
+                onApplyProposal={onApplyProposal}
+                onRejectProposal={onRejectProposal}
+                onUpdateIssue={onUpdateRevisionIssue}
+                onUndoRevisionRecord={onUndoRevisionRecord}
+              />
+            ) : null}
+            {activeSurface === 'publish' ? (
+              <PublishSurface
+                shell={shell}
+                publish={publish}
+                isExporting={isCreatingExportPackage}
+                onStartTask={onStartTask}
+                onCreateExportPackage={onCreateExportPackage}
+              />
+            ) : null}
+          </main>
 
-        <main className={activeSurface === 'writing' ? 'main-surface main-surface--writing' : 'main-surface'}>
-          {activeSurface === 'home' ? (
-            <HomeSurface
-              shell={shell}
-              activeChapter={activeChapter}
-              feedState={feedState}
-              onSurfaceChange={onSurfaceChange}
-              onCreateProjectRequest={() => setCreateProjectModalOpen(true)}
-              onSelectChapter={onSelectChapter}
-              onStartTask={onStartTask}
-            />
+          {!isFocusMode ? (
+            isAgentSidebarCollapsed ? (
+              <AgentSidebarRail
+                className={activeSurface === 'writing' ? 'agent-sidebar-rail--writing' : undefined}
+                mode={sidebarMode}
+                onModeChange={onSidebarModeChange}
+                onExpand={() => setAgentSidebarCollapsed(false)}
+              />
+            ) : (
+              <AgentSidebar
+                className={activeSurface === 'writing' ? 'agent-sidebar--writing' : undefined}
+                mode={sidebarMode}
+                onModeChange={onSidebarModeChange}
+                header={feedState.header}
+                tasks={feedState.tasks}
+                feed={feedState.feed}
+                diagnosticsByTaskId={feedState.diagnosticsByTaskId}
+                quickActions={visibleQuickActions}
+                runtimeMode={agentRuntimeMode}
+                runtimeLabel={agentRuntimeLabel}
+                onStartTask={onStartTask}
+                onOpenSettings={() => setSettingsModalOpen(true)}
+                onApplyProposal={onApplyProposal}
+                onRejectProposal={onRejectProposal}
+                onApplyPublishSynopsisDraft={handleApplyPublishSynopsisDraft}
+                onApplyPublishNotesDraft={handleApplyPublishNotesDraft}
+                onOpenPublishConfirm={handleOpenPublishConfirm}
+                onCollapse={() => setAgentSidebarCollapsed(true)}
+              />
+            )
           ) : null}
-          {activeSurface === 'writing' ? (
-            <WritingSurface
-              shell={shell}
-              chapterDocument={chapterDocument}
-              selectedSceneId={selectedSceneId}
-              onSelectScene={setSelectedSceneId}
-              onStartTask={onStartTask}
-              onSaveChapter={onSaveChapter}
-            />
-          ) : null}
-          {activeSurface === 'knowledge' ? (
-            <KnowledgeSurface
-              shell={shell}
-              visibleDocuments={knowledge.visibleDocuments}
-              selectedBucket={knowledge.selectedBucket}
-              onBucketChange={knowledge.onBucketChange}
-              selectedDocumentPath={knowledge.selectedDocumentPath}
-              selectedDocumentMetadata={knowledge.selectedDocumentMetadata}
-              selectedDocument={knowledge.selectedDocument}
-              isDocumentLoading={knowledge.isKnowledgeDocumentLoading}
-              documentError={knowledge.knowledgeDocumentError}
-              onSelectDocument={knowledge.onSelectDocument}
-              onStartTask={onStartTask}
-              onCreateKnowledgeAnswer={onCreateKnowledgeAnswer}
-              isGeneratingAnswer={isGeneratingKnowledgeAnswer}
-            />
-          ) : null}
-          {activeSurface === 'feature-center' && !activeFeatureTool ? (
-            <FeatureCenterHomeSurface shell={shell} onFeatureToolChange={onFeatureToolChange} />
-          ) : null}
-          {isAnalysisToolActive ? (
-            <AnalysisSurface
-              shell={shell}
-              overview={shell.analysisOverview}
-              sample={selectedAnalysisSample}
-              isApplyingStrategy={isApplyingAnalysisStrategy}
-              onCreateSampleRequest={onImportAnalysisSample}
-              onApplyProjectStrategyProposal={(sampleId) => onApplyProjectStrategyProposal({ sampleId })}
-              onStartTask={onStartTask}
-            />
-          ) : null}
-          {activeSurface === 'canon' ? (
-            <CanonSurface
-              shell={shell}
-              canonView={canonView}
-              onCanonViewChange={setCanonView}
-              selectedCategory={selectedCanonCategory}
-              onCategoryChange={setSelectedCanonCategory}
-              selectedCardId={selectedCanonCardId}
-              onSelectCard={setSelectedCanonCardId}
-              onStartTask={onStartTask}
-              onCommitCanonCard={onCommitCanonCard}
-            />
-          ) : null}
-          {activeSurface === 'revision' ? (
-            <RevisionSurface
-              issue={selectedIssue}
-              revisionRecords={shell.revisionRecords}
-              proposal={selectedRevisionProposal}
-              chapterDocument={chapterDocument}
-              onStartTask={onStartTask}
-              onApplyProposal={onApplyProposal}
-              onRejectProposal={onRejectProposal}
-              onUpdateIssue={onUpdateRevisionIssue}
-              onUndoRevisionRecord={onUndoRevisionRecord}
-            />
-          ) : null}
-          {activeSurface === 'publish' ? (
-            <PublishSurface
-              shell={shell}
-              publish={publish}
-              isExporting={isCreatingExportPackage}
-              onStartTask={onStartTask}
-              onCreateExportPackage={onCreateExportPackage}
-            />
-          ) : null}
-        </main>
-
-        {!isFocusMode ? (
-          <AgentSidebar
-            className={activeSurface === 'writing' ? 'agent-sidebar--writing' : undefined}
-            mode={sidebarMode}
-            onModeChange={onSidebarModeChange}
-            header={feedState.header}
-            tasks={feedState.tasks}
-            feed={feedState.feed}
-            diagnosticsByTaskId={feedState.diagnosticsByTaskId}
-            quickActions={visibleQuickActions}
-            onStartTask={onStartTask}
-            onApplyProposal={onApplyProposal}
-            onRejectProposal={onRejectProposal}
-            onApplyPublishSynopsisDraft={handleApplyPublishSynopsisDraft}
-            onApplyPublishNotesDraft={handleApplyPublishNotesDraft}
-            onOpenPublishConfirm={handleOpenPublishConfirm}
-          />
-        ) : null}
+        </div>
       </div>
 
       <footer className={isFocusMode ? 'status-bar status-bar--hidden' : 'status-bar'}>
@@ -2573,6 +2061,15 @@ export const NovelWorkbench = ({
         <SettingsModal
           shell={shell}
           activityLabel={activityLabel}
+          agentSettingsState={agentSettingsState}
+          agentSettingsError={agentSettingsError}
+          isLoadingSettings={isAgentSettingsLoading}
+          isSavingSettings={isSavingAgentSettings}
+          agentSettingsTestResult={agentSettingsTestResult}
+          agentSettingsTestError={agentSettingsTestError}
+          isTestingAgentSettings={isTestingAgentSettings}
+          onSaveAgentSettings={onSaveAgentSettings}
+          onTestAgentSettings={onTestAgentSettings}
           onClose={() => setSettingsModalOpen(false)}
           onOpenProject={onOpenProject}
           onGoPublish={() => onSurfaceChange('publish')}

@@ -46,6 +46,8 @@ import type {
   WorkspaceSearchResultDto,
   WorkspaceShellDto
 } from '@lime-novel/application'
+import { buildWorkspaceAgentHeader } from '@lime-novel/application'
+import { normalizeWorkspaceSurfaceState } from '@lime-novel/domain-novel'
 import { clamp, createId } from '@lime-novel/shared-kernel'
 import type { FeatureToolId, NovelSurfaceId, RiskLevel, TaskStatus } from '@lime-novel/domain-novel'
 import {
@@ -261,92 +263,6 @@ const NAVIGATION = [
   { id: 'publish', label: '发布', description: '导出预设与平台准备' }
 ] as const
 
-const buildWorkspaceAgentHeader = (
-  surface: NovelSurfaceId,
-  featureTool?: FeatureToolId
-): AgentHeaderDto => {
-  if (surface === 'writing') {
-    return {
-      currentAgent: '章节代理',
-      activeSubAgent: '设定扫描子代理',
-      surface,
-      memorySources: ['本章目标', '当前场景', '相邻章节', '最近提议'],
-      riskLevel: 'medium'
-    }
-  }
-
-  if (surface === 'canon') {
-    return {
-      currentAgent: '设定代理',
-      activeSubAgent: '事实抽取子代理',
-      surface,
-      memorySources: ['候选设定', '证据片段', '章节引用', '最近任务'],
-      riskLevel: 'medium'
-    }
-  }
-
-  if (surface === 'knowledge') {
-    return {
-      currentAgent: '知识代理',
-      activeSubAgent: '知识编译子代理',
-      surface,
-      memorySources: ['raw 素材', 'compiled 知识页', 'canon 设定', 'outputs 查询产物'],
-      riskLevel: 'medium'
-    }
-  }
-
-  if (surface === 'analysis') {
-    return {
-      currentAgent: '拆书代理',
-      activeSubAgent: '样本建模子代理',
-      surface,
-      memorySources: ['样本文本', '题材词', '结构信号', '项目 premise'],
-      riskLevel: 'medium'
-    }
-  }
-
-  if (surface === 'feature-center') {
-    if (featureTool === 'analysis') {
-      return buildWorkspaceAgentHeader('analysis')
-    }
-
-    return {
-      currentAgent: '功能中心',
-      surface,
-      memorySources: ['插件能力', '样本导入', '项目回写', '最近功能'],
-      riskLevel: 'low'
-    }
-  }
-
-  if (surface === 'revision') {
-    return {
-      currentAgent: '修订代理',
-      activeSubAgent: '连续性检查子代理',
-      surface,
-      memorySources: ['问题队列', '相邻章节', '证据片段', '修订记录'],
-      riskLevel: 'high'
-    }
-  }
-
-  if (surface === 'publish') {
-    return {
-      currentAgent: '发布代理',
-      activeSubAgent: '导出预检子代理',
-      surface,
-      memorySources: ['导出预设', '版本快照', '平台提示', '最近导出'],
-      riskLevel: 'medium'
-    }
-  }
-
-  return {
-    currentAgent: '项目总控代理',
-    activeSubAgent: '章节代理',
-    surface: 'home',
-    memorySources: ['项目摘要', '最近任务', '候选设定', '修订问题'],
-    riskLevel: 'medium'
-  }
-}
-
 const buildProposalRetryPrompt = (proposal: ProposalRow): string => {
   if (proposal.source_surface === 'revision') {
     return `刚才的修订任务是：“${proposal.source_intent.trim()}”。请再来一版更克制、改动更小的修订方案，只输出可应用提议与一句理由。`
@@ -427,32 +343,8 @@ const BLANK_RUNTIME_SEED: RuntimeSeed = {
   canonCandidates: [],
   revisionIssues: [],
   exportPresets: BASE_EXPORT_PRESETS,
-  agentTasks: [
-    {
-      task_id: 'task-project-bootstrap',
-      title: '项目已创建',
-      summary: '项目总控代理已经装配基础结构，建议先补第一章目标，再继续正文开场。',
-      status: 'completed',
-      surface: 'home',
-      agent_type: 'project'
-    }
-  ],
-  agentFeed: [
-    {
-      item_id: 'feed-project-bootstrap',
-      task_id: 'task-project-bootstrap',
-      kind: 'status',
-      title: '新的小说项目已经就绪',
-      body: '你现在可以先补第一章目标、主角处境和第一处冲突，再进入写作工作面。',
-      supporting_label: '首页 / 项目总控代理',
-      severity: null,
-      proposal_id: null,
-      approval_id: null,
-      diff_before: null,
-      diff_after: null,
-      created_at: '2026-04-02T12:00:00.000Z'
-    }
-  ],
+  agentTasks: [],
+  agentFeed: [],
   proposals: []
 }
 
@@ -684,16 +576,12 @@ const DEFAULT_PUBLISH_STATE: PublishStateConfig = {
 }
 
 const normalizeProjectConfig = (config: NovelProjectConfig): NovelProjectConfig => {
-  const currentSurface = config.currentSurface === 'analysis' ? 'feature-center' : config.currentSurface
-  const currentFeatureTool =
-    currentSurface === 'feature-center'
-      ? config.currentFeatureTool ?? (config.currentSurface === 'analysis' ? 'analysis' : undefined)
-      : undefined
+  const nextState = normalizeWorkspaceSurfaceState(config.currentSurface, config.currentFeatureTool)
 
   return {
     ...config,
-    currentSurface,
-    currentFeatureTool,
+    currentSurface: nextState.surface,
+    currentFeatureTool: nextState.featureTool,
     publishState: {
       ...DEFAULT_PUBLISH_STATE,
       ...config.publishState
@@ -2283,16 +2171,12 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
 
   async updateWorkspaceContext(input: UpdateWorkspaceContextInputDto): Promise<void> {
     const config = await this.loadConfig()
-    const nextSurface = input.surface === 'analysis' ? 'feature-center' : input.surface
-    const nextFeatureTool =
-      nextSurface === 'feature-center'
-        ? input.featureTool ?? (input.surface === 'analysis' ? 'analysis' : undefined)
-        : undefined
+    const nextState = normalizeWorkspaceSurfaceState(input.surface, input.featureTool)
 
     await this.saveConfig({
       ...config,
-      currentSurface: nextSurface,
-      currentFeatureTool: nextFeatureTool,
+      currentSurface: nextState.surface,
+      currentFeatureTool: nextState.featureTool,
       currentChapterId: input.chapterId ?? config.currentChapterId
     })
   }

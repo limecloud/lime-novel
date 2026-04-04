@@ -31,6 +31,9 @@ export const CHANNELS = {
     createExportPackage: 'publish:create-export-package'
   },
   agent: {
+    loadSettings: 'agent:load-settings',
+    saveSettings: 'agent:save-settings',
+    testSettings: 'agent:test-settings',
     startTask: 'agent:start-task',
     loadTaskDiagnostics: 'agent:load-task-diagnostics',
     taskEvent: 'agent:task-event'
