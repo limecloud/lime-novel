@@ -51,7 +51,7 @@ jobs:
             SOURCE_REF="${{ github.event.inputs.source_ref }}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
-            SOURCE_REF="${GITHUB_REF}"
+            SOURCE_REF="${GITHUB_SHA}"
           fi
 
           VERSION="${TAG#v}"
@@ -118,7 +118,7 @@ jobs:
             SOURCE_REF="${{ github.event.inputs.source_ref }}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
-            SOURCE_REF="${GITHUB_REF}"
+            SOURCE_REF="${GITHUB_SHA}"
           fi
 
           VERSION="${TAG#v}"
@@ -177,7 +177,7 @@ jobs:
             SOURCE_REF="${{ github.event.inputs.source_ref }}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
-            SOURCE_REF="${GITHUB_REF}"
+            SOURCE_REF="${GITHUB_SHA}"
           fi
 
           VERSION="${TAG#v}"
@@ -239,7 +239,7 @@ jobs:
             SOURCE_REF="${{ github.event.inputs.source_ref }}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
-            SOURCE_REF="${GITHUB_REF}"
+            SOURCE_REF="${GITHUB_SHA}"
           fi
 
           VERSION="${TAG#v}"
