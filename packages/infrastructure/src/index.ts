@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { basename, extname, join, relative, resolve } from 'node:path'
+import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { deflateRawSync } from 'node:zlib'
 import type { SQLInputValue } from 'node:sqlite'
 import type {
   AnalysisOverviewDto,
@@ -9,6 +10,7 @@ import type {
   AnalysisScoreDto,
   AgentFeedItemDto,
   AgentHeaderDto,
+  AgentTaskDiagnosticsDto,
   AgentTaskDto,
   ApplyProjectStrategyProposalInputDto,
   ApplyProjectStrategyProposalResultDto,
@@ -19,6 +21,7 @@ import type {
   CommitCanonCardResultDto,
   CreateProjectInputDto,
   CreateProjectResultDto,
+  DiagnosticReportDto,
   ExportComparisonDto,
   CreateExportPackageInputDto,
   CreateExportPackageResultDto,
@@ -26,17 +29,26 @@ import type {
   ExportPresetDto,
   GenerateKnowledgeAnswerInputDto,
   GenerateKnowledgeAnswerResultDto,
+  HarnessLockDto,
+  HarnessProfileDto,
+  ImpactAnalysisDto,
+  ImportKnowledgeDocumentInputDto,
+  ImportKnowledgeDocumentResultDto,
   ImportAnalysisSampleInputDto,
   ImportAnalysisSampleResultDto,
+  IntentPlanDto,
   KnowledgeDocumentDetailDto,
   KnowledgeDocumentDto,
   KnowledgeSummaryDto,
+  NovelLifecycleModeDto,
   ProjectRepositoryPort,
   QuickActionDto,
+  ReaderFeedbackDto,
   RejectProposalResultDto,
   RevisionIssueDto,
   SaveChapterInputDto,
   SaveChapterResultDto,
+  TimelineIterationDto,
   UndoRevisionRecordResultDto,
   UpdateRevisionIssueInputDto,
   UpdateRevisionIssueResultDto,
@@ -104,6 +116,13 @@ type PublishStateConfig = {
   lastOutputDir: string
 }
 
+type LifecycleConfig = {
+  mode: NovelLifecycleModeDto
+  publishedChapterRefs?: string[]
+  lockedChapterRefs?: string[]
+  switchedAt?: string
+}
+
 type NovelProjectConfig = {
   schemaVersion: number
   projectId: string
@@ -117,6 +136,8 @@ type NovelProjectConfig = {
   currentFeatureTool?: FeatureToolId
   currentChapterId: string
   publishState: PublishStateConfig
+  lifecycle?: LifecycleConfig
+  harnessProfile?: HarnessProfileDto
   volumes: VolumeConfig[]
   chapters: ChapterConfig[]
   homeHighlights: HomeHighlightConfig[]
@@ -207,7 +228,20 @@ type ExportManifest = {
   notes: string
   platformFeedback: string[]
   generatedAt: string
+  harnessLockId?: string
   files: string[]
+}
+
+type ExportChapterAsset = {
+  order: number
+  title: string
+  content: string
+}
+
+type ZipEntryInput = {
+  path: string
+  content: string
+  compression?: 'store' | 'deflate'
 }
 
 type AgentTaskRow = {
@@ -231,6 +265,21 @@ type AgentFeedRow = {
   approval_id: string | null
   diff_before: string | null
   diff_after: string | null
+  created_at: string
+}
+
+type AgentTaskDiagnosticsRow = {
+  task_id: string
+  trace_json: string
+  tool_events_json: string
+  stats_json: string
+  failure_json: string | null
+  updated_at: string
+}
+
+type HarnessJsonRow = {
+  id: string
+  payload_json: string
   created_at: string
 }
 
@@ -575,8 +624,33 @@ const DEFAULT_PUBLISH_STATE: PublishStateConfig = {
   lastOutputDir: ''
 }
 
+const createDefaultLifecycle = (): LifecycleConfig => ({
+  mode: 'sandbox',
+  publishedChapterRefs: [],
+  lockedChapterRefs: []
+})
+
+const buildDefaultHarnessProfile = (
+  config: Pick<NovelProjectConfig, 'projectId' | 'lifecycle'>
+): HarnessProfileDto => ({
+  profileId: `harness-${config.projectId}`,
+  projectId: config.projectId,
+  mode: config.lifecycle?.mode ?? 'sandbox',
+  layers: ['story', 'character', 'reader'],
+  constraints: [
+    '正文与 confirmed canon 修改必须经过 proposal/apply。',
+    '发布前结构改动必须生成冲击波分析。',
+    '发布后已发布章节只读，修复落在未来章节。'
+  ],
+  updatedAt: formatTimestamp()
+})
+
 const normalizeProjectConfig = (config: NovelProjectConfig): NovelProjectConfig => {
   const nextState = normalizeWorkspaceSurfaceState(config.currentSurface, config.currentFeatureTool)
+  const lifecycle = {
+    ...createDefaultLifecycle(),
+    ...config.lifecycle
+  }
 
   return {
     ...config,
@@ -585,7 +659,17 @@ const normalizeProjectConfig = (config: NovelProjectConfig): NovelProjectConfig 
     publishState: {
       ...DEFAULT_PUBLISH_STATE,
       ...config.publishState
-    }
+    },
+    lifecycle,
+    harnessProfile: config.harnessProfile
+      ? {
+          ...config.harnessProfile,
+          mode: lifecycle.mode
+        }
+      : buildDefaultHarnessProfile({
+          projectId: config.projectId,
+          lifecycle
+        })
   }
 }
 
@@ -700,6 +784,243 @@ const sanitizeFileSegment = (value: string): string => {
     .toLowerCase()
 
   return normalized || 'lime-novel-project'
+}
+
+const toKnowledgeFrontmatterScalar = (value: string): string =>
+  JSON.stringify(value.replace(/\r?\n/g, ' ').trim())
+
+const escapeXml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+
+const stripMarkdownForEpub = (value: string): string =>
+  value
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim()
+
+const buildEpubParagraphs = (content: string): string => {
+  const paragraphs = stripMarkdownForEpub(content)
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+
+  return paragraphs.length > 0
+    ? paragraphs.map((paragraph) => `<p>${escapeXml(paragraph)}</p>`).join('\n')
+    : '<p>本章暂未补充正文。</p>'
+}
+
+const createCrc32Table = (): number[] => {
+  const table: number[] = []
+
+  for (let index = 0; index < 256; index += 1) {
+    let value = index
+
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1
+    }
+
+    table[index] = value >>> 0
+  }
+
+  return table
+}
+
+const CRC32_TABLE = createCrc32Table()
+
+const calculateCrc32 = (buffer: Buffer): number => {
+  let crc = 0xffffffff
+
+  for (const byte of buffer) {
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8)
+  }
+
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+const createZipArchive = (entries: ZipEntryInput[]): Buffer => {
+  const localParts: Buffer[] = []
+  const centralParts: Buffer[] = []
+  let offset = 0
+
+  for (const entry of entries) {
+    const nameBuffer = Buffer.from(entry.path, 'utf8')
+    const sourceBuffer = Buffer.from(entry.content, 'utf8')
+    const shouldStore = entry.compression === 'store'
+    const payload = shouldStore ? sourceBuffer : deflateRawSync(sourceBuffer)
+    const crc = calculateCrc32(sourceBuffer)
+    const method = shouldStore ? 0 : 8
+    const localHeader = Buffer.alloc(30)
+
+    localHeader.writeUInt32LE(0x04034b50, 0)
+    localHeader.writeUInt16LE(20, 4)
+    localHeader.writeUInt16LE(0x0800, 6)
+    localHeader.writeUInt16LE(method, 8)
+    localHeader.writeUInt16LE(0, 10)
+    localHeader.writeUInt16LE(0, 12)
+    localHeader.writeUInt32LE(crc, 14)
+    localHeader.writeUInt32LE(payload.length, 18)
+    localHeader.writeUInt32LE(sourceBuffer.length, 22)
+    localHeader.writeUInt16LE(nameBuffer.length, 26)
+    localHeader.writeUInt16LE(0, 28)
+
+    localParts.push(localHeader, nameBuffer, payload)
+
+    const centralHeader = Buffer.alloc(46)
+    centralHeader.writeUInt32LE(0x02014b50, 0)
+    centralHeader.writeUInt16LE(20, 4)
+    centralHeader.writeUInt16LE(20, 6)
+    centralHeader.writeUInt16LE(0x0800, 8)
+    centralHeader.writeUInt16LE(method, 10)
+    centralHeader.writeUInt16LE(0, 12)
+    centralHeader.writeUInt16LE(0, 14)
+    centralHeader.writeUInt32LE(crc, 16)
+    centralHeader.writeUInt32LE(payload.length, 20)
+    centralHeader.writeUInt32LE(sourceBuffer.length, 24)
+    centralHeader.writeUInt16LE(nameBuffer.length, 28)
+    centralHeader.writeUInt16LE(0, 30)
+    centralHeader.writeUInt16LE(0, 32)
+    centralHeader.writeUInt16LE(0, 34)
+    centralHeader.writeUInt16LE(0, 36)
+    centralHeader.writeUInt32LE(0, 38)
+    centralHeader.writeUInt32LE(offset, 42)
+    centralParts.push(centralHeader, nameBuffer)
+
+    offset += localHeader.length + nameBuffer.length + payload.length
+  }
+
+  const centralDirectory = Buffer.concat(centralParts)
+  const localDirectory = Buffer.concat(localParts)
+  const endRecord = Buffer.alloc(22)
+
+  endRecord.writeUInt32LE(0x06054b50, 0)
+  endRecord.writeUInt16LE(0, 4)
+  endRecord.writeUInt16LE(0, 6)
+  endRecord.writeUInt16LE(entries.length, 8)
+  endRecord.writeUInt16LE(entries.length, 10)
+  endRecord.writeUInt32LE(centralDirectory.length, 12)
+  endRecord.writeUInt32LE(localDirectory.length, 16)
+  endRecord.writeUInt16LE(0, 20)
+
+  return Buffer.concat([localDirectory, centralDirectory, endRecord])
+}
+
+const buildEpubArchive = (input: {
+  projectId: string
+  title: string
+  versionTag: string
+  synopsis: string
+  chapters: ExportChapterAsset[]
+  generatedAt: string
+}): Buffer => {
+  const chapterItems = input.chapters.map((chapter) => {
+    const fileName = `chapter-${String(chapter.order).padStart(3, '0')}.xhtml`
+
+    return {
+      ...chapter,
+      fileName
+    }
+  })
+  const navItems = chapterItems
+    .map((chapter) => `<li><a href="${chapter.fileName}">第 ${chapter.order} 章 ${escapeXml(chapter.title)}</a></li>`)
+    .join('\n')
+  const manifestItems = chapterItems
+    .map((chapter) => `<item id="chapter-${chapter.order}" href="${chapter.fileName}" media-type="application/xhtml+xml"/>`)
+    .join('\n')
+  const spineItems = chapterItems.map((chapter) => `<itemref idref="chapter-${chapter.order}"/>`).join('\n')
+  const packageDocument = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="book-id" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="book-id">${escapeXml(input.projectId)}-${escapeXml(input.versionTag)}</dc:identifier>
+    <dc:title>${escapeXml(input.title)}</dc:title>
+    <dc:language>zh-CN</dc:language>
+    <dc:date>${escapeXml(input.generatedAt)}</dc:date>
+    <meta property="dcterms:modified">${escapeXml(input.generatedAt.replace(/\.\d{3}Z$/, 'Z'))}</meta>
+    <dc:description>${escapeXml(input.synopsis)}</dc:description>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="style" href="styles.css" media-type="text/css"/>
+    ${manifestItems}
+  </manifest>
+  <spine>
+    ${spineItems}
+  </spine>
+</package>
+`
+  const navDocument = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN">
+  <head>
+    <title>${escapeXml(input.title)}</title>
+    <link rel="stylesheet" type="text/css" href="styles.css"/>
+  </head>
+  <body>
+    <nav epub:type="toc" xmlns:epub="http://www.idpf.org/2007/ops">
+      <h1>${escapeXml(input.title)}</h1>
+      <ol>
+        ${navItems}
+      </ol>
+    </nav>
+  </body>
+</html>
+`
+  const chapterDocuments = chapterItems.map((chapter) => ({
+    path: `EPUB/${chapter.fileName}`,
+    content: `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-CN">
+  <head>
+    <title>第 ${chapter.order} 章 ${escapeXml(chapter.title)}</title>
+    <link rel="stylesheet" type="text/css" href="styles.css"/>
+  </head>
+  <body>
+    <section>
+      <h1>第 ${chapter.order} 章 ${escapeXml(chapter.title)}</h1>
+      ${buildEpubParagraphs(chapter.content)}
+    </section>
+  </body>
+</html>
+`
+  }))
+
+  return createZipArchive([
+    {
+      path: 'mimetype',
+      content: 'application/epub+zip',
+      compression: 'store'
+    },
+    {
+      path: 'META-INF/container.xml',
+      content: `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="EPUB/package.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+`
+    },
+    {
+      path: 'EPUB/package.opf',
+      content: packageDocument
+    },
+    {
+      path: 'EPUB/nav.xhtml',
+      content: navDocument
+    },
+    {
+      path: 'EPUB/styles.css',
+      content: 'body { font-family: serif; line-height: 1.75; } p { text-indent: 2em; margin: 0 0 1em; }'
+    },
+    ...chapterDocuments
+  ])
 }
 
 const buildProjectQuickActions = (template: CreateProjectInputDto['template']): QuickActionDto[] =>
@@ -1069,6 +1390,27 @@ const mapAnalysisSampleRow = (row: AnalysisSampleRow): AnalysisSampleDto => ({
   inspirationSignals: parseJsonArray(row.inspiration_signals_json)
 })
 
+const mapAgentTaskDiagnosticsRow = (row: AgentTaskDiagnosticsRow): AgentTaskDiagnosticsDto => ({
+  taskId: row.task_id,
+  trace: parseJsonObject<AgentTaskDiagnosticsDto['trace']>(row.trace_json, []),
+  toolEvents: parseJsonObject<AgentTaskDiagnosticsDto['toolEvents']>(row.tool_events_json, []),
+  stats: parseJsonObject<AgentTaskDiagnosticsDto['stats']>(row.stats_json, {
+    turnCount: 0,
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0
+    }
+  }),
+  failure: row.failure_json
+    ? parseJsonObject<NonNullable<AgentTaskDiagnosticsDto['failure']>>(row.failure_json, {
+        subtype: 'error_during_execution',
+        detail: '诊断记录读取失败。',
+        turnCount: 0
+      })
+    : undefined,
+  updatedAt: row.updated_at
+})
+
 const buildAnalysisOverview = (samples: AnalysisSampleDto[]): AnalysisOverviewDto => {
   if (samples.length === 0) {
     return {
@@ -1235,6 +1577,7 @@ const buildNovelProjectConfig = (
       ? '让读者先感到不对劲，再看见主角为何非继续靠近不可。'
       : '建立人物、世界和冲突入口，让第一章能自然接到下一场景。'
   const timestamp = formatTimestamp()
+  const lifecycle = createDefaultLifecycle()
 
   return {
     schemaVersion: 1,
@@ -1248,6 +1591,11 @@ const buildNovelProjectConfig = (
     currentSurface: 'home',
     currentChapterId: chapterId,
     publishState: { ...DEFAULT_PUBLISH_STATE },
+    lifecycle,
+    harnessProfile: buildDefaultHarnessProfile({
+      projectId,
+      lifecycle
+    }),
     volumes: [
       {
         volumeId,
@@ -1585,6 +1933,15 @@ const createRuntimeDatabase = (dbPath: string): DatabaseSync => {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS agent_task_diagnostics (
+      task_id TEXT PRIMARY KEY,
+      trace_json TEXT NOT NULL,
+      tool_events_json TEXT NOT NULL,
+      stats_json TEXT NOT NULL,
+      failure_json TEXT,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS proposals (
       proposal_id TEXT PRIMARY KEY,
       chapter_id TEXT NOT NULL,
@@ -1616,6 +1973,42 @@ const createRuntimeDatabase = (dbPath: string): DatabaseSync => {
       snapshot_path TEXT NOT NULL,
       created_at TEXT NOT NULL,
       undone_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS diagnostic_reports (
+      report_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS impact_analyses (
+      impact_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS intent_plans (
+      plan_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reader_feedback_batches (
+      feedback_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS timeline_iterations (
+      iteration_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS harness_locks (
+      lock_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
   `)
 
@@ -1664,6 +2057,14 @@ const seedRuntimeDatabase = (database: DatabaseSync, seed: RuntimeSeed): void =>
   seedTableIfEmpty(database, 'proposals', seed.proposals)
 }
 
+const parseHarnessJsonRow = <T>(row: HarnessJsonRow): T | undefined => {
+  try {
+    return JSON.parse(row.payload_json) as T
+  } catch {
+    return undefined
+  }
+}
+
 class FileSystemNovelRepository implements ProjectRepositoryPort {
   private readonly configPath: string
   private readonly runtimeDir: string
@@ -1702,6 +2103,36 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
         )
         .all() as AnalysisSampleRow[]
     ).map((row) => mapAnalysisSampleRow(row))
+    const diagnosticReports = (
+      this.database
+        .prepare('SELECT report_id AS id, payload_json, created_at FROM diagnostic_reports ORDER BY datetime(created_at) DESC, rowid DESC LIMIT 12')
+        .all() as HarnessJsonRow[]
+    ).map((row) => parseHarnessJsonRow<DiagnosticReportDto>(row)).filter((item): item is DiagnosticReportDto => Boolean(item))
+    const impactAnalyses = (
+      this.database
+        .prepare('SELECT impact_id AS id, payload_json, created_at FROM impact_analyses ORDER BY datetime(created_at) DESC, rowid DESC LIMIT 12')
+        .all() as HarnessJsonRow[]
+    ).map((row) => parseHarnessJsonRow<ImpactAnalysisDto>(row)).filter((item): item is ImpactAnalysisDto => Boolean(item))
+    const intentPlans = (
+      this.database
+        .prepare('SELECT plan_id AS id, payload_json, created_at FROM intent_plans ORDER BY datetime(created_at) DESC, rowid DESC LIMIT 12')
+        .all() as HarnessJsonRow[]
+    ).map((row) => parseHarnessJsonRow<IntentPlanDto>(row)).filter((item): item is IntentPlanDto => Boolean(item))
+    const readerFeedback = (
+      this.database
+        .prepare('SELECT feedback_id AS id, payload_json, created_at FROM reader_feedback_batches ORDER BY datetime(created_at) DESC, rowid DESC LIMIT 12')
+        .all() as HarnessJsonRow[]
+    ).map((row) => parseHarnessJsonRow<ReaderFeedbackDto>(row)).filter((item): item is ReaderFeedbackDto => Boolean(item))
+    const timelineIterations = (
+      this.database
+        .prepare('SELECT iteration_id AS id, payload_json, created_at FROM timeline_iterations ORDER BY datetime(created_at) DESC, rowid DESC LIMIT 12')
+        .all() as HarnessJsonRow[]
+    ).map((row) => parseHarnessJsonRow<TimelineIterationDto>(row)).filter((item): item is TimelineIterationDto => Boolean(item))
+    const harnessLocks = (
+      this.database
+        .prepare('SELECT lock_id AS id, payload_json, created_at FROM harness_locks ORDER BY datetime(created_at) DESC, rowid DESC LIMIT 12')
+        .all() as HarnessJsonRow[]
+    ).map((row) => parseHarnessJsonRow<HarnessLockDto>(row)).filter((item): item is HarnessLockDto => Boolean(item))
     const volumeLabelById = new Map(config.volumes.map((volume) => [volume.volumeId, volume.title]))
     const chapterLabelById = new Map(
       config.chapters.map((chapter) => [chapter.chapterId, `第 ${chapter.order} 章 · ${chapter.title}`])
@@ -1761,12 +2192,16 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
         status: config.status,
         genre: config.genre,
         premise: config.premise,
+        lifecycleMode: config.lifecycle?.mode ?? 'sandbox',
+        publishedChapterRefs: config.lifecycle?.publishedChapterRefs ?? [],
+        lockedChapterRefs: config.lifecycle?.lockedChapterRefs ?? [],
         releaseVersion: config.publishState.currentVersion,
         lastPublishedAt: config.publishState.lastPublishedAt || undefined,
         currentSurface: config.currentSurface,
         currentFeatureTool: config.currentFeatureTool,
         currentChapterId: config.currentChapterId
       },
+      harnessProfile: config.harnessProfile ?? buildDefaultHarnessProfile(config),
       navigation: [...NAVIGATION],
       chapterTree: config.chapters.map((chapter) => ({
         chapterId: chapter.chapterId,
@@ -1869,7 +2304,13 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
         .map((row) => this.mapAgentFeedRow(row as AgentFeedRow, proposalById.get((row as AgentFeedRow).proposal_id ?? ''))),
       quickActions: config.quickActions,
       recentExports,
-      latestExportComparison
+      latestExportComparison,
+      diagnosticReports,
+      impactAnalyses,
+      intentPlans,
+      readerFeedback,
+      timelineIterations,
+      harnessLocks
     }
   }
 
@@ -2154,6 +2595,52 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
     }
   }
 
+  async importKnowledgeDocument(
+    input: ImportKnowledgeDocumentInputDto
+  ): Promise<ImportKnowledgeDocumentResultDto> {
+    const extension = extname(input.filePath).toLowerCase()
+
+    if (!['.txt', '.md', '.markdown'].includes(extension)) {
+      throw new Error('当前只支持导入 .txt、.md 或 .markdown 文件。')
+    }
+
+    const sourceContent = await readFile(input.filePath, 'utf8')
+    const sourceName = basename(input.filePath, extension)
+    const importedAt = new Date().toISOString()
+    const targetFileName = `${importedAt.replace(/[:]/g, '-').replace(/\..+$/, '')}-${sanitizeFileSegment(sourceName)}.md`
+    const relativePath = `raw/research/${targetFileName}`
+    const outputPath = join(this.workspaceRoot, relativePath)
+    const summary = createKnowledgeExcerpt(sourceContent, 96)
+    const content = `---
+id: ${createKnowledgeDocumentId(relativePath)}
+type: source
+title: ${toKnowledgeFrontmatterScalar(sourceName)}
+status: reference
+summary: ${toKnowledgeFrontmatterScalar(summary)}
+sources:
+  - ${toKnowledgeFrontmatterScalar(input.filePath)}
+related:
+updatedAt: ${importedAt}
+---
+
+# ${sourceName}
+
+${sourceContent.trim()}
+`
+
+    await mkdir(join(this.workspaceRoot, 'raw/research'), { recursive: true })
+    await writeFile(outputPath, `${content.trim()}\n`, 'utf8')
+
+    return {
+      documentId: createKnowledgeDocumentId(relativePath),
+      title: sourceName,
+      relativePath,
+      outputPath,
+      summary: `已导入 raw 资料：${sourceName}`,
+      excerpt: summary
+    }
+  }
+
   async loadChapterDocument(chapterId: string): Promise<ChapterDocumentDto> {
     const config = await this.loadConfig()
     const chapter = this.getChapterConfig(config, chapterId)
@@ -2184,6 +2671,7 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
   async saveChapterDocument(input: SaveChapterInputDto): Promise<SaveChapterResultDto> {
     const config = await this.loadConfig()
     const chapter = this.getChapterConfig(config, input.chapterId)
+    this.assertChapterWritable(config, chapter.chapterId, '保存正文')
     const nextContent = normalizeNarrativeContent(input.content)
     const nextEditedAt = formatTimestamp()
     const nextWordCount = countNarrativeChars(nextContent)
@@ -2239,9 +2727,13 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
       status: config.status,
       genre: config.genre,
       premise: config.premise,
+      lifecycleMode: config.lifecycle?.mode ?? 'sandbox',
+      publishedChapterRefs: config.lifecycle?.publishedChapterRefs ?? [],
+      lockedChapterRefs: config.lifecycle?.lockedChapterRefs ?? [],
       releaseVersion: config.publishState.currentVersion,
       lastPublishedAt: config.publishState.lastPublishedAt || undefined,
       currentSurface: config.currentSurface,
+      currentFeatureTool: config.currentFeatureTool,
       currentChapterId: config.currentChapterId
     })
 
@@ -2314,9 +2806,13 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
       status: config.status,
       genre: config.genre,
       premise: config.premise,
+      lifecycleMode: config.lifecycle?.mode ?? 'sandbox',
+      publishedChapterRefs: config.lifecycle?.publishedChapterRefs ?? [],
+      lockedChapterRefs: config.lifecycle?.lockedChapterRefs ?? [],
       releaseVersion: config.publishState.currentVersion,
       lastPublishedAt: config.publishState.lastPublishedAt || undefined,
       currentSurface: config.currentSurface,
+      currentFeatureTool: config.currentFeatureTool,
       currentChapterId: config.currentChapterId
     })
     const generatedCards: CanonCandidateDto[] = [
@@ -2408,6 +2904,44 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
       })
   }
 
+  async upsertAgentTaskDiagnostics(diagnostics: AgentTaskDiagnosticsDto): Promise<void> {
+    this.database
+      .prepare(
+        `INSERT INTO agent_task_diagnostics (
+            task_id, trace_json, tool_events_json, stats_json, failure_json, updated_at
+          ) VALUES (
+            @task_id, @trace_json, @tool_events_json, @stats_json, @failure_json, @updated_at
+          )
+          ON CONFLICT(task_id) DO UPDATE SET
+            trace_json = excluded.trace_json,
+            tool_events_json = excluded.tool_events_json,
+            stats_json = excluded.stats_json,
+            failure_json = excluded.failure_json,
+            updated_at = excluded.updated_at`
+      )
+      .run({
+        task_id: diagnostics.taskId,
+        trace_json: JSON.stringify(diagnostics.trace),
+        tool_events_json: JSON.stringify(diagnostics.toolEvents),
+        stats_json: JSON.stringify(diagnostics.stats),
+        failure_json: diagnostics.failure ? JSON.stringify(diagnostics.failure) : null,
+        updated_at: diagnostics.updatedAt
+      })
+  }
+
+  async loadAgentTaskDiagnostics(): Promise<AgentTaskDiagnosticsDto[]> {
+    return (
+      this.database
+        .prepare(
+          `SELECT task_id, trace_json, tool_events_json, stats_json, failure_json, updated_at
+             FROM agent_task_diagnostics
+            ORDER BY datetime(updated_at) DESC, rowid DESC
+            LIMIT 20`
+        )
+        .all() as AgentTaskDiagnosticsRow[]
+    ).map((row) => mapAgentTaskDiagnosticsRow(row))
+  }
+
   async saveGeneratedProposal(input: {
     proposalId: string
     chapterId: string
@@ -2487,6 +3021,91 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
     this.writeRevisionIssueStatus(issue.issueId, issue.status)
   }
 
+  async upsertDiagnosticReport(report: DiagnosticReportDto): Promise<void> {
+    this.database
+      .prepare(
+        `INSERT INTO diagnostic_reports (report_id, payload_json, created_at)
+         VALUES (@report_id, @payload_json, @created_at)
+         ON CONFLICT(report_id) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at`
+      )
+      .run({
+        report_id: report.reportId,
+        payload_json: JSON.stringify(report),
+        created_at: report.generatedAt
+      })
+    await this.writeHarnessArtifactJson(`compiled/reports/diagnostic/${report.reportId}.json`, report)
+  }
+
+  async upsertImpactAnalysis(analysis: ImpactAnalysisDto): Promise<void> {
+    this.database
+      .prepare(
+        `INSERT INTO impact_analyses (impact_id, payload_json, created_at)
+         VALUES (@impact_id, @payload_json, @created_at)
+         ON CONFLICT(impact_id) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at`
+      )
+      .run({
+        impact_id: analysis.impactId,
+        payload_json: JSON.stringify(analysis),
+        created_at: analysis.createdAt
+      })
+    await this.writeHarnessArtifactJson(`compiled/reports/impact/${analysis.impactId}.json`, analysis)
+  }
+
+  async upsertIntentPlan(plan: IntentPlanDto): Promise<void> {
+    this.database
+      .prepare(
+        `INSERT INTO intent_plans (plan_id, payload_json, created_at)
+         VALUES (@plan_id, @payload_json, @created_at)
+         ON CONFLICT(plan_id) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at`
+      )
+      .run({
+        plan_id: plan.planId,
+        payload_json: JSON.stringify(plan),
+        created_at: plan.createdAt
+      })
+    await this.writeHarnessArtifactJson(`revisions/harness/intent-plans/${plan.planId}.json`, plan)
+  }
+
+  async upsertReaderFeedback(feedback: ReaderFeedbackDto): Promise<void> {
+    this.database
+      .prepare(
+        `INSERT INTO reader_feedback_batches (feedback_id, payload_json, created_at)
+         VALUES (@feedback_id, @payload_json, @created_at)
+         ON CONFLICT(feedback_id) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at`
+      )
+      .run({
+        feedback_id: feedback.feedbackId,
+        payload_json: JSON.stringify(feedback),
+        created_at: feedback.collectedAt
+      })
+    await this.writeHarnessArtifactJson(`compiled/reports/reader-feedback/${feedback.feedbackId}.json`, feedback)
+  }
+
+  async upsertTimelineIteration(iteration: TimelineIterationDto): Promise<void> {
+    this.database
+      .prepare(
+        `INSERT INTO timeline_iterations (iteration_id, payload_json, created_at)
+         VALUES (@iteration_id, @payload_json, @created_at)
+         ON CONFLICT(iteration_id) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at`
+      )
+      .run({
+        iteration_id: iteration.iterationId,
+        payload_json: JSON.stringify(iteration),
+        created_at: iteration.createdAt
+      })
+    await this.writeHarnessArtifactJson(`revisions/harness/timeline-iterations/${iteration.iterationId}.json`, iteration)
+  }
+
   async applyProposal(proposalId: string): Promise<ApplyProposalResultDto> {
     const proposal = this.database
       .prepare(
@@ -2502,6 +3121,7 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
 
     const config = await this.loadConfig()
     const chapter = this.getChapterConfig(config, proposal.chapter_id)
+    this.assertChapterWritable(config, chapter.chapterId, '应用提议')
     const previousContent = normalizeNarrativeContent(await readFile(join(this.workspaceRoot, chapter.file), 'utf8'))
     const issueStatusBefore = proposal.linked_issue_id
       ? (this.getRevisionIssueStatus(proposal.linked_issue_id) ?? 'open')
@@ -2706,6 +3326,7 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
 
     const config = await this.loadConfig()
     const chapter = this.getChapterConfig(config, record.chapter_id)
+    this.assertChapterWritable(config, chapter.chapterId, '撤销修订')
     const currentContent = normalizeNarrativeContent(await readFile(join(this.workspaceRoot, chapter.file), 'utf8'))
 
     if (currentContent !== normalizeNarrativeContent(record.after_content)) {
@@ -2804,19 +3425,65 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
         return `# 第${chapter.order}章 ${chapter.title}\n\n${content.trim()}\n`
       })
     )
+    const chapterAssets = await Promise.all(
+      selectedChapters.map(async (chapter) => ({
+        order: chapter.order,
+        title: chapter.title,
+        content: await readFile(join(this.workspaceRoot, chapter.file), 'utf8')
+      }))
+    )
 
     const manuscriptPath = join(outputDir, preset.format === 'markdown' ? 'manuscript.md' : 'prepack.md')
+    const epubPath = preset.format === 'epub' ? join(outputDir, 'manuscript.epub') : undefined
     const synopsisPath = join(outputDir, 'synopsis.md')
     const notesPath = join(outputDir, 'release-notes.md')
     const feedbackPath = join(outputDir, 'platform-feedback.md')
     const manifestPath = join(outputDir, 'manifest.json')
     const generatedAt = new Date().toISOString()
+    const publishedChapterRefs = selectedChapters.map((chapter) => chapter.chapterId)
+    const lockId = createId('harness-lock')
+    const unresolvedHighRiskIssueIds = this.loadUnresolvedHighRiskIssueIds()
+    const harnessLock: HarnessLockDto = {
+      lockId,
+      projectId: config.projectId,
+      versionTag,
+      modeBefore: config.lifecycle?.mode ?? 'sandbox',
+      modeAfter: 'timeline',
+      lockedAt: generatedAt,
+      publishedChapterRefs,
+      lockedChapterRefs: publishedChapterRefs,
+      diagnosticReportId: this.loadLatestDiagnosticReportId(),
+      unresolvedHighRiskIssueIds,
+      exportManifestPath: manifestPath,
+      summary:
+        unresolvedHighRiskIssueIds.length > 0
+          ? `发布前 Harness Lock 已创建，但仍有 ${unresolvedHighRiskIssueIds.length} 个高风险修订问题需要后续处理。`
+          : '发布前 Harness Lock 已创建，当前导出章节进入 timeline 只读边界。',
+      metadata: {
+        standard: 'agentnovel@0.1.2',
+        source: 'createExportPackage',
+        presetId: preset.preset_id
+      }
+    }
 
     await writeFile(
       manuscriptPath,
       [`# ${config.title}`, '', `> 版本：${versionTag}`, `> 预设：${preset.title}`, '', ...chapterBlocks].join('\n'),
       'utf8'
     )
+    if (epubPath) {
+      await writeFile(
+        epubPath,
+        buildEpubArchive({
+          projectId: config.projectId,
+          title: config.title,
+          versionTag,
+          synopsis,
+          chapters: chapterAssets,
+          generatedAt
+        })
+      )
+    }
     await writeFile(synopsisPath, `${synopsis}\n`, 'utf8')
     await writeFile(
       notesPath,
@@ -2851,7 +3518,8 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
       notes,
       platformFeedback,
       generatedAt,
-      files: [manuscriptPath, synopsisPath, notesPath, feedbackPath]
+      harnessLockId: lockId,
+      files: [manuscriptPath, ...(epubPath ? [epubPath] : []), synopsisPath, notesPath, feedbackPath]
     }
 
     await writeFile(
@@ -2860,9 +3528,39 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
       'utf8'
     )
 
+    await mkdir(join(this.workspaceRoot, 'revisions/harness/locks'), { recursive: true })
+    await writeFile(
+      join(this.workspaceRoot, 'revisions/harness/locks', `${sanitizeFileSegment(versionTag)}.json`),
+      `${JSON.stringify(harnessLock, null, 2)}\n`,
+      'utf8'
+    )
+    this.upsertHarnessLock(harnessLock)
+
     await this.saveConfig({
       ...config,
       currentSurface: 'publish',
+      status: 'publishing',
+      lifecycle: {
+        ...(config.lifecycle ?? createDefaultLifecycle()),
+        mode: 'timeline',
+        publishedChapterRefs,
+        lockedChapterRefs: publishedChapterRefs,
+        switchedAt: generatedAt
+      },
+      harnessProfile: {
+        ...(config.harnessProfile ?? buildDefaultHarnessProfile(config)),
+        mode: 'timeline',
+        updatedAt: formatTimestamp()
+      },
+      chapters: config.chapters.map((chapter) =>
+        publishedChapterRefs.includes(chapter.chapterId)
+          ? {
+              ...chapter,
+              status: 'published',
+              lastEditedAt: generatedAt
+            }
+          : chapter
+      ),
       publishState: {
         currentVersion: versionTag,
         lastPublishedAt: generatedAt,
@@ -2870,6 +3568,17 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
         lastManifestPath: manifestPath,
         lastOutputDir: outputDir
       }
+    })
+
+    await this.appendAgentFeed({
+      itemId: createId('feed'),
+      taskId: 'publish-harness-lock',
+      kind: unresolvedHighRiskIssueIds.length > 0 ? 'issue' : 'approval',
+      title: '发布前 Harness Lock 已创建',
+      body: harnessLock.summary,
+      supportingLabel: `${versionTag} / ${publishedChapterRefs.length} 个章节进入只读边界`,
+      severity: unresolvedHighRiskIssueIds.length > 0 ? 'high' : undefined,
+      createdAt: generatedAt
     })
 
     return {
@@ -2891,6 +3600,75 @@ class FileSystemNovelRepository implements ProjectRepositoryPort {
 
   private async saveConfig(config: NovelProjectConfig): Promise<void> {
     await writeFile(this.configPath, `${JSON.stringify(normalizeProjectConfig(config), null, 2)}\n`, 'utf8')
+  }
+
+  private async writeHarnessArtifactJson(relativePath: string, payload: unknown): Promise<void> {
+    const outputPath = join(this.workspaceRoot, relativePath)
+
+    await mkdir(dirname(outputPath), { recursive: true })
+    await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
+  }
+
+  private assertChapterWritable(
+    config: NovelProjectConfig,
+    chapterId: string,
+    actionLabel: string
+  ): void {
+    const lifecycle = config.lifecycle ?? createDefaultLifecycle()
+    const readOnlyRefs = new Set([
+      ...(lifecycle.publishedChapterRefs ?? []),
+      ...(lifecycle.lockedChapterRefs ?? [])
+    ])
+
+    if (lifecycle.mode !== 'timeline' || !readOnlyRefs.has(chapterId)) {
+      return
+    }
+
+    throw new Error(
+      `${actionLabel} 被时间线 Harness 拦截：章节 ${chapterId} 已发布并进入只读边界，请把修复转为未来章节补强或 timeline iteration。`
+    )
+  }
+
+  private loadLatestDiagnosticReportId(): string | undefined {
+    const row = this.database
+      .prepare('SELECT report_id FROM diagnostic_reports ORDER BY datetime(created_at) DESC, rowid DESC LIMIT 1')
+      .get() as { report_id: string } | undefined
+
+    return row?.report_id
+  }
+
+  private loadUnresolvedHighRiskIssueIds(): string[] {
+    const rows = this.database
+      .prepare(
+        `SELECT issue_id
+           FROM revision_issues
+          WHERE severity = 'high'
+            AND issue_id NOT IN (
+              SELECT issue_id
+                FROM revision_issue_state
+               WHERE status = 'resolved'
+            )
+          ORDER BY rowid ASC`
+      )
+      .all() as Array<{ issue_id: string }>
+
+    return rows.map((row) => row.issue_id)
+  }
+
+  private upsertHarnessLock(lock: HarnessLockDto): void {
+    this.database
+      .prepare(
+        `INSERT INTO harness_locks (lock_id, payload_json, created_at)
+         VALUES (@lock_id, @payload_json, @created_at)
+         ON CONFLICT(lock_id) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           created_at = excluded.created_at`
+      )
+      .run({
+        lock_id: lock.lockId,
+        payload_json: JSON.stringify(lock),
+        created_at: lock.lockedAt
+      })
   }
 
   private getRevisionIssueStatus(issueId: string): RevisionIssueDto['status'] | undefined {
@@ -3100,12 +3878,20 @@ export const createNovelProjectWorkspace = async (
       'compiled/themes',
       'compiled/queries',
       'compiled/reports',
+      'compiled/reports/diagnostic',
+      'compiled/reports/impact',
+      'compiled/reports/reader-feedback',
       'canon/characters',
       'canon/locations',
       'canon/rules',
       'canon/items',
       'canon/timeline',
+      'canon/foreshadowing',
+      'canon/character-states',
       'revisions/snapshots',
+      'revisions/harness/locks',
+      'revisions/harness/intent-plans',
+      'revisions/harness/timeline-iterations',
       'exports',
       'outputs/answers',
       'outputs/briefs',

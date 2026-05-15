@@ -103,12 +103,22 @@ export const isPublishConfirmSuggestionItem = (item: AgentFeedItemDto): boolean 
 
 export const buildExpectedPublishAssets = (preset?: ExportPresetDto): Array<{ label: string; detail: string }> => {
   const manuscriptFile = preset?.format === 'markdown' ? 'manuscript.md' : 'prepack.md'
+  const formatAssets =
+    preset?.format === 'epub'
+      ? [
+          {
+            label: 'manuscript.epub',
+            detail: '可在阅读器中打开的 EPUB 正文包。'
+          }
+        ]
+      : []
 
   return [
     {
       label: manuscriptFile,
       detail: '正文主包，按当前预设聚合章节内容。'
     },
+    ...formatAssets,
     {
       label: 'synopsis.md',
       detail: '平台简介，随版本一起归档。'

@@ -345,7 +345,7 @@ Renderer 打开项目
 - 基础设定代理
 - 基础修订代理
 - 章节记忆、设定提取、问题队列
-- Markdown / PDF / EPUB 导出
+- Markdown / EPUB 导出；PDF 等排版型产物放到后续真实渲染器阶段
 
 首期暂不主动扩展：
 

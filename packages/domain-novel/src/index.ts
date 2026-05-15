@@ -136,7 +136,7 @@ export type ApprovalRequest = {
 export type ExportPreset = {
   presetId: string
   title: string
-  format: 'markdown' | 'pdf' | 'epub'
+  format: 'markdown' | 'epub'
   status: 'draft' | 'ready'
   summary: string
 }

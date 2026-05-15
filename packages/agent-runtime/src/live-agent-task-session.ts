@@ -438,6 +438,44 @@ export class LiveAgentTaskSession {
     return this.commitMaterializedArtifacts(this.materializeExecutionArtifacts(shell, startInput, executionResult))
   }
 
+  async failCommit(input: {
+    detail: string
+    stats?: AgentTaskExecutionStatsDto
+  }): Promise<AgentTaskDto> {
+    const stats =
+      input.stats ?? {
+        turnCount: 0,
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0
+        }
+      }
+
+    return this.commitMaterializedArtifacts({
+      feed: [
+        {
+          itemId: createId('feed'),
+          taskId: this.currentTask.taskId,
+          kind: 'issue',
+          title: '代理结果回写失败',
+          body: input.detail,
+          supportingLabel: 'Agent Runtime / commit_failed',
+          severity: 'high',
+          createdAt: nowIso()
+        }
+      ],
+      finalStatus: 'failed',
+      finalSummary: input.detail,
+      stats,
+      failure: {
+        subtype: 'error_during_execution',
+        detail: input.detail,
+        turnCount: stats.turnCount,
+        usage: stats.usage
+      }
+    })
+  }
+
   private async commitMaterializedArtifacts(artifacts: MaterializedTaskArtifacts): Promise<AgentTaskDto> {
     for (const item of artifacts.feed) {
       await this.input.repository.appendAgentFeed(item)

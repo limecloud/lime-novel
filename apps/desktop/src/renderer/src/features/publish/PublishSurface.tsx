@@ -34,6 +34,8 @@ export const PublishSurface = ({
   const splitValue = Number.parseInt(publish.exportSplit, 10) || 3
   const latestExport = shell.recentExports[0]
   const latestExportComparison = shell.latestExportComparison
+  const latestHarnessLock = shell.harnessLocks[0]
+  const lifecycleLabel = shell.project.lifecycleMode === 'timeline' ? 'Timeline 时间线' : 'Sandbox 沙盘'
   const expectedAssets = buildExpectedPublishAssets(preset)
   const comparisonNotes = buildPublishComparisonNotes(shell, {
     versionTag: publish.versionTag.trim() || suggestNextPublishVersion(shell),
@@ -50,6 +52,7 @@ export const PublishSurface = ({
       <section className="surface-hero surface-hero--publish">
         <div className="surface-hero__meta-bar">
           <span>当前版本：{shell.project.releaseVersion}</span>
+          <span>Harness：{lifecycleLabel}</span>
           <span>建议版本：{suggestNextPublishVersion(shell)}</span>
           <span>{latestExport ? `最近导出：${latestExport.versionTag}` : '最近导出：暂无'}</span>
         </div>
@@ -70,6 +73,54 @@ export const PublishSurface = ({
           ))}
         </div>
       </section>
+
+      <article className="surface-card">
+        <div className="surface-card__header">
+          <div>
+            <span className="eyebrow">Harness Lock</span>
+            <h3>{latestHarnessLock ? `已锁定 ${latestHarnessLock.versionTag}` : '发布前锁定准备'}</h3>
+          </div>
+          <span className="status-chip">
+            {shell.project.lifecycleMode === 'timeline' ? '已进入时间线' : '等待发布锁定'}
+          </span>
+        </div>
+        <div className="detail-list detail-list--compact">
+          <div className="detail-list__item">
+            <strong>锁定边界</strong>
+            <span>
+              {latestHarnessLock
+                ? `${latestHarnessLock.lockedChapterRefs.length} 个章节只读`
+                : '确认导出时会创建 Harness Lock，并把当前导出章节切入只读时间线。'}
+            </span>
+          </div>
+          <div className="detail-list__item">
+            <strong>最近体检</strong>
+            <span>{latestHarnessLock?.diagnosticReportId ?? '还没有绑定体检报告，建议先让修订代理做一次发布前体检。'}</span>
+          </div>
+          <div className="detail-list__item">
+            <strong>高风险问题</strong>
+            <span>
+              {latestHarnessLock
+                ? `${latestHarnessLock.unresolvedHighRiskIssueIds.length} 个未解决`
+                : `${shell.revisionIssues.filter((issue) => issue.severity === 'high').length} 个待确认`}
+            </span>
+          </div>
+        </div>
+        <div className="hero-actions">
+          <button
+            className="ghost-button"
+            onClick={() => onStartTask('请执行发布前 Harness Lock 预检：汇总最新体检、冲击波、高风险 issue 和即将只读的章节。')}
+          >
+            让代理做锁定预检
+          </button>
+          <button
+            className="ghost-button"
+            onClick={() => onStartTask('发布后如果读者反馈集中在旧章节，请规划未来章节回潮方案，不要回改已发布章节。')}
+          >
+            规划发布后回潮
+          </button>
+        </div>
+      </article>
 
       <div className="surface-grid surface-grid--two-large">
         <article className="surface-card surface-card--preview">
@@ -378,8 +429,12 @@ export const PublishSurface = ({
               <div className="detail-list__item">
                 <strong>版本回写</strong>
                 <span>
-                  这次会把 {publish.versionTag.trim() || suggestNextPublishVersion(shell)} 与导出时间回写到项目配置中。
+                  这次会把 {publish.versionTag.trim() || suggestNextPublishVersion(shell)} 与导出时间回写到项目配置中，并创建 Harness Lock。
                 </span>
+              </div>
+              <div className="detail-list__item">
+                <strong>时间线切换</strong>
+                <span>确认导出后，当前导出章节进入 timeline 只读边界，后续修复应落在未来章节。</span>
               </div>
               <div className="detail-list__item">
                 <strong>输出资产</strong>

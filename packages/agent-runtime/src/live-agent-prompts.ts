@@ -30,7 +30,12 @@ export const buildLiveAgentSystemPrompt = (input: {
     '不要假装已经读过正文、保存过提议或写回过仓储；凡是需要读取或写入，都必须先调用对应工具。',
     '遇到工具报错时，不要放弃；先根据错误修正参数，再继续执行。',
     '如果不确定当前上下文，优先调用 load_workspace_snapshot。',
+    '需要跨章节或跨资产查找信息时，调用 search_workspace。',
     '需要查看正文时，调用 load_chapter_document。',
+    '需要查看具体知识页时，调用 load_knowledge_document。',
+    '涉及小说体检、黄金三章、伏笔链、人物弧光、读者反馈或发布后修复时，优先调用 Novel Harness 工具生成结构化产物。',
+    'Novel Harness 产物必须先保存为 report、impact、intent plan、feedback 或 timeline iteration；右栏 artifacts 只能投影为 status、evidence、proposal、issue、approval。',
+    '如果 Harness 产物内部风险是 blocking，提交到右栏 artifact 的 severity 必须映射为 high。',
     `任务结束前必须调用一次 ${SUBMIT_TASK_RESULT_TOOL_NAME}。`,
     `自然语言文本不算完成，只有 ${SUBMIT_TASK_RESULT_TOOL_NAME} 才算最终结果。`,
     `${SUBMIT_TASK_RESULT_TOOL_NAME} 必须单独调用，不要和其他工具放在同一轮。`,
@@ -46,11 +51,13 @@ export const buildLiveAgentSystemPrompt = (input: {
       : effectiveSurface === 'revision'
         ? [
             '修订任务如果发现问题，必须先调用 upsert_revision_issue 写回问题队列。',
+            '修订任务如果是小说体检、冲击波分析或作者意图规划，必须调用 generate_diagnostic_report、simulate_impact 或 create_intent_plan 保存 Harness 产物。',
             '修订任务如果同时生成可应用正文，必须先 save_proposal_draft，再 submit_task_result，并优先使用 waiting_approval。'
           ]
         : effectiveSurface === 'knowledge'
           ? [
               '知识工作面优先围绕项目内已有资料、知识页和查询产物组织结果。',
+              '如果用户要求沉淀一份可复用回答，应调用 generate_knowledge_answer 写入 outputs 后再提交结果。',
               '如果当前问题明显缺资料，直接指出缺口，不要假装已经完成深度研究。'
             ]
           : effectiveSurface === 'canon'

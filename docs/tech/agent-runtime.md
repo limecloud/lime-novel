@@ -1,7 +1,7 @@
 # Lime Novel 代理运行时设计
 
 > 版本：0.4
-> 更新：2026-04-03
+> 更新：2026-05-15
 
 ---
 
@@ -20,7 +20,7 @@
 
 ## 1.1 当前已落地范围
 
-截至 `2026-04-03`，仓库里已经实现第一阶段可执行版本，边界如下：
+截至 `2026-05-15`，仓库里已经实现第一阶段可执行版本，边界如下：
 
 - 已实现
   - `anthropic` provider 抽象（对齐 Claude / CC 的 messages + tool use 主链）
@@ -31,9 +31,15 @@
   - 与现有 `Electron IPC + TaskEventDto + AgentFeed` 协议兼容
   - 桌面端 Agent 设置持久化与运行时注入
   - 无模型配置时自动回退到 `legacy` 规则型 runtime
+  - 知识工作面支持导入 `.txt` / `.md` / `.markdown` 到 `raw/research`
+  - 发布工作面支持 Markdown 快照与真实 EPUB 包导出
+  - `npm run verify:runtime-smoke` 覆盖项目、章节、代理、知识导入/问答、导出与诊断持久化闭环
 - 已接入工具
   - `load_workspace_snapshot`
   - `load_chapter_document`
+  - `search_workspace`
+  - `load_knowledge_document`
+  - `generate_knowledge_answer`
   - `save_proposal_draft`
   - `upsert_canon_candidate`
   - `upsert_revision_issue`

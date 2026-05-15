@@ -29,7 +29,9 @@ type KnowledgeSurfaceProps = {
   onSelectDocument: (relativePath: string) => void
   onStartTask: (intent: string, surface?: NovelSurfaceId) => void
   onCreateKnowledgeAnswer: (input: GenerateKnowledgeAnswerInputDto) => Promise<GenerateKnowledgeAnswerResultDto>
+  onImportKnowledgeDocument: () => void
   isGeneratingAnswer: boolean
+  isImportingDocument: boolean
 }
 
 export const KnowledgeSurface = ({
@@ -45,7 +47,9 @@ export const KnowledgeSurface = ({
   onSelectDocument,
   onStartTask,
   onCreateKnowledgeAnswer,
-  isGeneratingAnswer
+  onImportKnowledgeDocument,
+  isGeneratingAnswer,
+  isImportingDocument
 }: KnowledgeSurfaceProps) => {
   const [queryDraft, setQueryDraft] = useState(`第 12 章前，林清远当前知道什么，又误判了什么？`)
   const [queryFormat, setQueryFormat] = useState<GenerateKnowledgeAnswerInputDto['format']>('report')
@@ -84,6 +88,22 @@ export const KnowledgeSurface = ({
             <span>待刷新 {shell.knowledgeSummary.staleDocuments}</span>
             <span>最近输出 {shell.knowledgeRecentOutputs.length}</span>
           </div>
+        </div>
+        <div className="hero-actions">
+          <button className="primary-button" onClick={onImportKnowledgeDocument} disabled={isImportingDocument}>
+            {isImportingDocument ? '正在导入...' : '导入资料'}
+          </button>
+          <button
+            className="ghost-button"
+            onClick={() =>
+              onStartTask(
+                `请基于知识工作面里的资料继续深挖这个问题：${queryDraft.trim() || '当前项目最值得确认的信息差是什么？'}`,
+                'knowledge'
+              )
+            }
+          >
+            交给代理追问
+          </button>
         </div>
       </section>
 
@@ -189,16 +209,8 @@ export const KnowledgeSurface = ({
               <span className="eyebrow">知识问答</span>
               <h2>把问题写成项目文件</h2>
             </div>
-            <button
-              className="inline-link"
-              onClick={() =>
-                onStartTask(
-                  `请基于知识工作面里的资料继续深挖这个问题：${queryDraft.trim() || '当前项目最值得确认的信息差是什么？'}`,
-                  'knowledge'
-                )
-              }
-            >
-              交给代理继续追问
+            <button className="inline-link" onClick={onImportKnowledgeDocument} disabled={isImportingDocument}>
+              {isImportingDocument ? '正在导入资料' : '补充 raw 资料'}
             </button>
           </div>
 

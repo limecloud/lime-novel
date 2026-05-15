@@ -2,6 +2,7 @@ import { loadRuntimeChapterDocument } from './agent-runtime-repository'
 import {
   expectObject,
   objectSchema,
+  readRequiredString,
   readOptionalString,
   stringSchema
 } from './live-agent-tool-schema'
@@ -11,6 +12,23 @@ const MAX_CONTENT_CHARS = 12000
 
 const truncate = (value: string, maxLength = MAX_CONTENT_CHARS): string =>
   value.length <= maxLength ? value : `${value.slice(0, maxLength)}\n...[已截断]`
+
+const readOptionalNumber = (
+  value: Record<string, unknown>,
+  key: string
+): number | undefined => {
+  const field = value[key]
+
+  if (field == null || field === '') {
+    return undefined
+  }
+
+  if (typeof field !== 'number' || !Number.isFinite(field)) {
+    throw new Error(`${key} 必须是数字。`)
+  }
+
+  return field
+}
 
 const buildWorkspaceSnapshot = (context: AgentToolContext) => {
   const { shell } = context
@@ -175,5 +193,96 @@ export const createLiveWorkspaceTools = (
     isConcurrencySafe: () => true,
     getProgressLabel: (input: { chapterId?: string }) =>
       input.chapterId ? `读取章节 ${input.chapterId}` : '读取当前章节正文'
+  },
+  {
+    name: 'search_workspace',
+    description: '检索当前工作区里的项目、章节、正文、设定、修订、导出与知识资产。',
+    inputSchema: objectSchema(
+      {
+        query: stringSchema('搜索关键词或问题。'),
+        limit: {
+          type: 'number',
+          description: '可选。返回条数，默认 8，最大 20。'
+        }
+      },
+      ['query']
+    ),
+    parse: (input) => {
+      const value = expectObject(input, 'search_workspace')
+      return {
+        query: readRequiredString(value, 'query'),
+        limit: readOptionalNumber(value, 'limit')
+      }
+    },
+    execute: async (input: { query: string; limit?: number }) => {
+      const result = await context.repository.searchWorkspace({
+        query: input.query,
+        limit: Math.min(Math.max(Math.floor(input.limit ?? 8), 1), 20)
+      })
+
+      return {
+        query: result.query,
+        items: result.items.map((item) => ({
+          kind: item.kind,
+          title: item.title,
+          snippet: item.snippet,
+          surface: item.surface,
+          featureTool: item.featureTool,
+          chapterId: item.chapterId,
+          entityId: item.entityId,
+          score: item.score
+        }))
+      }
+    },
+    isConcurrencySafe: () => true,
+    getProgressLabel: (input: { query: string }) => `检索：${input.query}`
+  },
+  {
+    name: 'load_knowledge_document',
+    description: '读取一份知识页、设定卡或查询输出的完整内容。relativePath 来自工作区快照或 search_workspace 结果的 entityId。',
+    inputSchema: objectSchema(
+      {
+        relativePath: stringSchema('知识文档相对路径。')
+      },
+      ['relativePath']
+    ),
+    parse: (input) => {
+      const value = expectObject(input, 'load_knowledge_document')
+      return {
+        relativePath: readRequiredString(value, 'relativePath')
+      }
+    },
+    execute: async (input: { relativePath: string }) => {
+      const document = await context.repository.loadKnowledgeDocument(input.relativePath)
+
+      return {
+        ...document,
+        content: truncate(document.content)
+      }
+    },
+    isConcurrencySafe: () => true,
+    getProgressLabel: (input: { relativePath: string }) => `读取知识页：${input.relativePath}`
+  },
+  {
+    name: 'generate_knowledge_answer',
+    description: '基于当前项目知识库生成一份报告或简报，并写入 outputs 目录。',
+    inputSchema: objectSchema(
+      {
+        question: stringSchema('要回答并写入知识库的问题。'),
+        format: stringSchema('report 或 brief。', ['report', 'brief'])
+      },
+      ['question', 'format']
+    ),
+    parse: (input) => {
+      const value = expectObject(input, 'generate_knowledge_answer')
+      return {
+        question: readRequiredString(value, 'question'),
+        format: readRequiredString(value, 'format') as 'report' | 'brief'
+      }
+    },
+    execute: async (input: { question: string; format: 'report' | 'brief' }) =>
+      context.repository.generateKnowledgeAnswer(input),
+    isConcurrencySafe: () => false,
+    getProgressLabel: (input: { question: string }) => `生成知识问答：${input.question}`
   }
 ] as AgentTool<unknown, unknown>[]

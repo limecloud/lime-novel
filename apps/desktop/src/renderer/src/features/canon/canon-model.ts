@@ -1,6 +1,6 @@
 import type { CanonCandidateDto, ChapterListItemDto } from '@lime-novel/application'
 
-export type CanonView = 'cards' | 'graph' | 'timeline'
+export type CanonView = 'cards' | 'graph' | 'timeline' | 'harness'
 export type CanonCategoryId = 'all' | 'character' | 'location' | 'rule' | 'timeline'
 
 export const canonCategoryDefinitions: Array<{

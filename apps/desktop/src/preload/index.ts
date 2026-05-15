@@ -12,7 +12,8 @@ const api: DesktopApiContract = {
   },
   knowledge: {
     loadDocument: (relativePath: string) => ipcRenderer.invoke(CHANNELS.knowledge.loadDocument, relativePath),
-    generateAnswer: (input) => ipcRenderer.invoke(CHANNELS.knowledge.generateAnswer, input)
+    generateAnswer: (input) => ipcRenderer.invoke(CHANNELS.knowledge.generateAnswer, input),
+    importDocument: () => ipcRenderer.invoke(CHANNELS.knowledge.importDocument)
   },
   chapter: {
     loadDocument: (chapterId: string) => ipcRenderer.invoke(CHANNELS.chapter.loadDocument, chapterId),

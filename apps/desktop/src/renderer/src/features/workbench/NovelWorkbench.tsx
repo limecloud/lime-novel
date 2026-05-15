@@ -70,6 +70,7 @@ type NovelWorkbenchProps = {
   isCreatingProject: boolean
   isOpeningProject: boolean
   isImportingAnalysisSample: boolean
+  isImportingKnowledgeDocument: boolean
   isApplyingAnalysisStrategy: boolean
   isCreatingExportPackage: boolean
   isGeneratingKnowledgeAnswer: boolean
@@ -98,6 +99,7 @@ type NovelWorkbenchProps = {
   onUndoRevisionRecord: (recordId: string) => void
   onCreateExportPackage: (input: CreateExportPackageInputDto) => void
   onCreateKnowledgeAnswer: (input: GenerateKnowledgeAnswerInputDto) => Promise<GenerateKnowledgeAnswerResultDto>
+  onImportKnowledgeDocument: () => void
   onSaveAgentSettings: (input: AgentRuntimeSettingsDto) => void
   onTestAgentSettings: (input: AgentRuntimeSettingsDto) => void
 }
@@ -950,6 +952,15 @@ const HomeSurface = ({
   const totalWords = shell.chapterTree.reduce((sum, chapter) => sum + chapter.wordCount, 0)
   const progress = Math.min(totalWords / 200000, 1)
   const spotlightItems = feedState.feed.slice(0, 3)
+  const harnessArtifactCount =
+    shell.diagnosticReports.length +
+    shell.impactAnalyses.length +
+    shell.intentPlans.length +
+    shell.readerFeedback.length +
+    shell.timelineIterations.length
+  const latestDiagnosticReport = shell.diagnosticReports[0]
+  const latestImpactAnalysis = shell.impactAnalyses[0]
+  const latestTimelineIteration = shell.timelineIterations[0]
 
   return (
     <div className="surface-stack">
@@ -964,6 +975,7 @@ const HomeSurface = ({
             <span>拆书样本 {shell.analysisSamples.length}</span>
             <span>候选设定卡 {shell.canonCandidates.length}</span>
             <span>修订问题 {shell.revisionIssues.length}</span>
+            <span>Harness 产物 {harnessArtifactCount}</span>
             <span>导出预设 {shell.exportPresets.length}</span>
           </div>
           <div className="progress-track">
@@ -1035,6 +1047,32 @@ const HomeSurface = ({
       </div>
 
       <section className="surface-grid surface-grid--three">
+        <article className="surface-card">
+          <span className="eyebrow">小说驾驭引擎</span>
+          <h3>{shell.project.lifecycleMode === 'timeline' ? 'Timeline 时间线模式' : 'Sandbox 沙盘模式'}</h3>
+          <p>{shell.harnessProfile.constraints[0] ?? 'Harness 负责先诊断、模拟和出方案，不直接覆盖正文。'}</p>
+        </article>
+        <article className="surface-card">
+          <span className="eyebrow">最新体检 / 影响</span>
+          <h3>{latestDiagnosticReport ? latestDiagnosticReport.summary : '等待小说体检报告'}</h3>
+          <p>
+            {latestImpactAnalysis
+              ? `最近冲击波：${latestImpactAnalysis.riskLevel} · ${latestImpactAnalysis.affectedRefs.length} 个影响对象`
+              : '可从修订工作面发起体检、黄金三章检查或冲击波分析。'}
+          </p>
+        </article>
+        <article className="surface-card">
+          <span className="eyebrow">读者与时间线</span>
+          <h3>{shell.readerFeedback.length} 组反馈映射</h3>
+          <p>
+            {latestTimelineIteration
+              ? `最近计划：${latestTimelineIteration.strategy}，承载 ${latestTimelineIteration.targetFutureRefs.join(' / ')}`
+              : '读者反馈会先作为证据映射，再决定是否进入未来章节补强。'}
+          </p>
+        </article>
+      </section>
+
+      <section className="surface-grid surface-grid--three">
         {shell.homeHighlights.map((item) => (
           <article key={item.title} className="surface-card">
             <span className="eyebrow">项目健康度</span>
@@ -1085,7 +1123,16 @@ const WritingSurface = ({
 
   const isDirty = draftContent !== chapterDocument.content
   const selectedSceneGoal = selectedScene?.goal ?? chapterDocument.objective
+  const isReadOnlyByTimeline = shell.project.lockedChapterRefs.includes(chapterDocument.chapterId)
+  const chapterHarnessFindings = shell.diagnosticReports
+    .flatMap((report) => report.findings)
+    .filter((finding) => finding.targetRefs.includes(chapterDocument.chapterId))
+    .slice(0, 2)
   const handleSave = (): void => {
+    if (isReadOnlyByTimeline) {
+      return
+    }
+
     onSaveChapter(chapterDocument.chapterId, draftContent)
   }
 
@@ -1103,6 +1150,7 @@ const WritingSurface = ({
               <span>场景：{selectedScene?.title ?? '当前场景'}</span>
               <span>{chapterDocument.lastEditedAt}</span>
               <span>{formatCount(chapterDocument.wordCount)} 字</span>
+              <span>{isReadOnlyByTimeline ? 'Timeline 只读' : shell.project.lifecycleMode}</span>
               <span>{isDirty ? '有未保存更改' : '已同步到本地项目'}</span>
             </div>
             <button
@@ -1130,6 +1178,14 @@ const WritingSurface = ({
                 <strong>当前聚焦</strong>
                 <span>{selectedSceneGoal}</span>
               </div>
+              <div className="detail-list__item">
+                <strong>Harness 约束</strong>
+                <span>
+                  {isReadOnlyByTimeline
+                    ? '本章已发布，只能作为只读历史；修复应转为未来章节补强。'
+                    : chapterHarnessFindings[0]?.recommendation ?? shell.harnessProfile.constraints[0]}
+                </span>
+              </div>
             </div>
           </div>
         ) : null}
@@ -1144,8 +1200,13 @@ const WritingSurface = ({
             <span className="writing-canvas__summary-text">{selectedSceneGoal}</span>
           </div>
           <div className="writing-canvas__header-actions">
-            <button type="button" className="writing-mini-button writing-mini-button--primary" onClick={handleSave}>
-              保存
+            <button
+              type="button"
+              className="writing-mini-button writing-mini-button--primary"
+              onClick={handleSave}
+              disabled={isReadOnlyByTimeline}
+            >
+              {isReadOnlyByTimeline ? '已发布只读' : '保存'}
             </button>
             <button
               type="button"
@@ -1172,6 +1233,9 @@ const WritingSurface = ({
               <span className="status-chip status-chip--muted status-chip--slim">
                 {isDirty ? '有未保存更改' : '正文已保存'}
               </span>
+              <span className="status-chip status-chip--muted status-chip--slim">
+                {isReadOnlyByTimeline ? 'timeline 只读' : 'sandbox 可改'}
+              </span>
             </div>
             <div className="detail-list detail-list--compact">
               <div className="detail-list__item">
@@ -1185,6 +1249,14 @@ const WritingSurface = ({
               <div className="detail-list__item">
                 <strong>当前字数</strong>
                 <span>{formatCount(chapterDocument.wordCount)} 字</span>
+              </div>
+              <div className="detail-list__item">
+                <strong>当前 Harness</strong>
+                <span>
+                  {chapterHarnessFindings.length > 0
+                    ? chapterHarnessFindings.map((finding) => `${finding.area}：${finding.recommendation}`).join(' / ')
+                    : '暂无本章体检 finding，可从修订工作面发起小说体检。'}
+                </span>
               </div>
             </div>
           </div>
@@ -1451,6 +1523,7 @@ export const NovelWorkbench = ({
   isCreatingProject,
   isOpeningProject,
   isImportingAnalysisSample,
+  isImportingKnowledgeDocument,
   isApplyingAnalysisStrategy,
   isCreatingExportPackage,
   isGeneratingKnowledgeAnswer,
@@ -1480,6 +1553,7 @@ export const NovelWorkbench = ({
   onUndoRevisionRecord,
   onCreateExportPackage,
   onCreateKnowledgeAnswer,
+  onImportKnowledgeDocument,
   onSaveAgentSettings
 }: NovelWorkbenchProps) => {
   const activeChapterId = currentChapterId ?? chapterDocument?.chapterId ?? shell.project.currentChapterId
@@ -1939,7 +2013,9 @@ export const NovelWorkbench = ({
                 onSelectDocument={knowledge.onSelectDocument}
                 onStartTask={onStartTask}
                 onCreateKnowledgeAnswer={onCreateKnowledgeAnswer}
+                onImportKnowledgeDocument={onImportKnowledgeDocument}
                 isGeneratingAnswer={isGeneratingKnowledgeAnswer}
+                isImportingDocument={isImportingKnowledgeDocument}
               />
             ) : null}
             {activeSurface === 'feature-center' && !activeFeatureTool ? (

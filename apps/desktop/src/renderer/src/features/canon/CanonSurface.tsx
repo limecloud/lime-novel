@@ -11,6 +11,21 @@ type CanonSurfaceProps = {
 
 export const CanonSurface = ({ shell, canon, onStartTask, onCommitCanonCard }: CanonSurfaceProps) => {
   const selectedCard = canon.selectedCard
+  const characterCards = shell.canonCandidates.filter((card) => card.kind === 'character')
+  const foreshadowingCards = shell.canonCandidates.filter(
+    (card) =>
+      card.kind === 'item' ||
+      card.kind === 'rule' ||
+      /伏笔|线索|钥匙|秘密|谜/u.test(`${card.name} ${card.summary} ${card.evidence}`)
+  )
+  const characterFindings = shell.diagnosticReports
+    .flatMap((report) => report.findings)
+    .filter((finding) => finding.harnessLayer === 'character')
+    .slice(0, 3)
+  const foreshadowingFindings = shell.diagnosticReports
+    .flatMap((report) => report.findings)
+    .filter((finding) => finding.area === 'foreshadowing' || finding.area === 'info-gap')
+    .slice(0, 3)
 
   return (
     <div className="surface-stack">
@@ -38,6 +53,12 @@ export const CanonSurface = ({ shell, canon, onStartTask, onCommitCanonCard }: C
             onClick={() => canon.onCanonViewChange('timeline')}
           >
             时间线
+          </button>
+          <button
+            className={canon.canonView === 'harness' ? 'pill-button pill-button--active' : 'pill-button'}
+            onClick={() => canon.onCanonViewChange('harness')}
+          >
+            Harness
           </button>
         </div>
       </section>
@@ -89,6 +110,69 @@ export const CanonSurface = ({ shell, canon, onStartTask, onCommitCanonCard }: C
         </div>
       ) : null}
 
+      {canon.canonView === 'harness' ? (
+        <div className="surface-grid surface-grid--two">
+          <article className="surface-card">
+            <div className="surface-card__header">
+              <div>
+                <span className="eyebrow">人物状态机 MVP</span>
+                <h3>目标 / 代价 / 新状态</h3>
+              </div>
+              <button className="inline-link" onClick={() => onStartTask('请为当前主要人物生成章节级人物状态机，并标出证据。')}>
+                生成状态机
+              </button>
+            </div>
+            <div className="detail-list">
+              {(characterCards.length > 0 ? characterCards : shell.canonCandidates.slice(0, 2)).map((card) => (
+                <div key={card.cardId} className="detail-list__item">
+                  <strong>{card.name}</strong>
+                  <span>{card.summary} / 证据：{card.evidence}</span>
+                </div>
+              ))}
+              {characterFindings.map((finding) => (
+                <div key={finding.findingId} className="detail-list__item">
+                  <strong>{finding.area}</strong>
+                  <span>{finding.recommendation}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="surface-card">
+            <div className="surface-card__header">
+              <div>
+                <span className="eyebrow">伏笔链 MVP</span>
+                <h3>埋设 / 延展 / 回收</h3>
+              </div>
+              <button className="inline-link" onClick={() => onStartTask('请扫描当前设定和章节，整理伏笔链：根、延展、回收点和断裂风险。')}>
+                扫描伏笔链
+              </button>
+            </div>
+            <div className="timeline-board">
+              {(foreshadowingCards.length > 0 ? foreshadowingCards : shell.canonCandidates.slice(0, 3)).map((card) => (
+                <div key={card.cardId} className="timeline-item">
+                  <div className="timeline-item__dot" />
+                  <div>
+                    <strong>{card.name}</strong>
+                    <p>{card.summary} / {card.evidence}</p>
+                  </div>
+                </div>
+              ))}
+              {foreshadowingFindings.map((finding) => (
+                <div key={finding.findingId} className="timeline-item">
+                  <div className="timeline-item__dot" />
+                  <div>
+                    <strong>{finding.area}</strong>
+                    <p>{finding.diagnosis} / {finding.recommendation}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+      ) : null}
+
+      {canon.canonView !== 'harness' ? (
       <div className="surface-grid surface-grid--two">
         <article className="surface-card surface-card--graph">
           <div className="surface-card__header">
@@ -167,6 +251,7 @@ export const CanonSurface = ({ shell, canon, onStartTask, onCommitCanonCard }: C
           </div>
         </article>
       </div>
+      ) : null}
     </div>
   )
 }

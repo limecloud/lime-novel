@@ -285,11 +285,6 @@ export const AgentSidebar = ({
   const dialogueTrace = diagnostics?.trace.filter((entry) => entry.role !== 'system') ?? []
 
   const handleSubmit = (): void => {
-    if (runtimeMode === 'legacy') {
-      onOpenSettings()
-      return
-    }
-
     if (!draft.trim()) {
       return
     }
@@ -434,12 +429,7 @@ export const AgentSidebar = ({
           </div>
         ) : (
           mode === 'suggestions' ? (
-            runtimeMode === 'legacy' ? (
-              <div className="agent-empty-state">
-                <strong>当前不展示本地规则模式的建议卡</strong>
-                <p>“建议”页现在只保留真实 AI 运行产物。本地规则生成的占位卡片不会再冒充正式建议。</p>
-              </div>
-            ) : suggestionItems.length > 0 ? (
+            suggestionItems.length > 0 ? (
               suggestionItems.map((item) => (
                 <FeedCard
                   key={item.itemId}
@@ -454,21 +444,29 @@ export const AgentSidebar = ({
               ))
             ) : (
               <div className="agent-empty-state">
-                <strong>当前还没有真实建议卡</strong>
-                <p>当 live runtime 产出提议、证据或审批结果后，这里才会显示对应卡片。</p>
+                <strong>当前还没有建议卡</strong>
+                <p>发起写作、设定、修订或发布任务后，这里会显示可回写的提议、证据和审批结果。</p>
               </div>
             )
-          ) : runtimeMode === 'legacy' ? (
-            <div className="agent-empty-state">
-              <strong>当前没有真实对话轨迹</strong>
-              <p>“对话”页现在只显示 live runtime 的实时 trace。本地规则产物请到“建议”页查看。</p>
-            </div>
           ) : dialogueTrace.length > 0 ? (
             dialogueTrace.map((entry, index) => <TraceCard key={`${entry.role}:${entry.turnIndex}:${entry.toolCallId ?? entry.toolName ?? index}`} entry={entry} />)
+          ) : runtimeMode === 'legacy' && suggestionItems.length > 0 ? (
+            suggestionItems.map((item) => (
+              <FeedCard
+                key={item.itemId}
+                item={item}
+                onStartTask={onStartTask}
+                onApplyProposal={onApplyProposal}
+                onRejectProposal={onRejectProposal}
+                onApplyPublishSynopsisDraft={onApplyPublishSynopsisDraft}
+                onApplyPublishNotesDraft={onApplyPublishNotesDraft}
+                onOpenPublishConfirm={onOpenPublishConfirm}
+              />
+            ))
           ) : (
             <div className="agent-empty-state">
-              <strong>当前还没有实时对话轨迹</strong>
-              <p>发起一条新的 live 任务后，这里会按回合显示任务输入、代理响应和工具回写。</p>
+              <strong>当前还没有任务结果</strong>
+              <p>发起一条新任务后，这里会显示代理响应；live 模式还会额外显示逐轮工具轨迹。</p>
             </div>
           )
         )}
@@ -490,15 +488,15 @@ export const AgentSidebar = ({
       ) : mode === 'dialogue' ? (
         <section className="agent-sidebar__composer">
           <article className={runtimeMode === 'live' ? 'agent-runtime-notice agent-runtime-notice--live' : 'agent-runtime-notice'}>
-            <strong>{runtimeMode === 'live' ? `当前已接入 ${runtimeLabel}` : '当前仍在本地规则模式'}</strong>
+            <strong>{runtimeMode === 'live' ? `当前已接入 ${runtimeLabel}` : '当前使用本地规则代理'}</strong>
             <p>
               {runtimeMode === 'live'
                 ? '新发起的对话会走真实模型链路；如果输出仍不对，优先查看“代理”页里的运行轨迹和工具事件。'
-                : '这轮对话不会调用真实模型。先去设置里填入 provider 与 API Key，再发起新任务，才能切到 live runtime。'}
+                : '本地规则代理可以生成可回写提议、设定候选、修订问题和发布检查；接入模型后会升级为 live runtime。'}
             </p>
             {runtimeMode === 'legacy' ? (
               <button type="button" className="ghost-button" onClick={onOpenSettings}>
-                打开 Agent 设置
+                接入真实模型
               </button>
             ) : null}
           </article>
@@ -507,13 +505,7 @@ export const AgentSidebar = ({
               <button
                 key={action.id}
                 className="quick-action"
-                disabled={runtimeMode === 'legacy'}
                 onClick={() => {
-                  if (runtimeMode === 'legacy') {
-                    onOpenSettings()
-                    return
-                  }
-
                   onStartTask(action.prompt)
                 }}
               >
@@ -526,13 +518,12 @@ export const AgentSidebar = ({
             onChange={(event) => setDraft(event.target.value)}
             placeholder={
               runtimeMode === 'legacy'
-                ? '当前仍在本地规则模式。先打开 Agent 设置接入真实模型，再回来发起对话。'
+                ? '例如：检查当前章节视角泄露，并给一版最小修订方案。'
                 : '例如：补一版更克制的身体反应，并限制在 120 字内。'
             }
-            disabled={runtimeMode === 'legacy'}
           />
           <button className="primary-button" onClick={handleSubmit}>
-            {runtimeMode === 'legacy' ? '先接入真实模型' : '提交给当前代理'}
+            {runtimeMode === 'legacy' ? '提交给规则代理' : '提交给当前代理'}
           </button>
         </section>
       ) : null}

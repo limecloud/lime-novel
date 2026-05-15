@@ -19,6 +19,9 @@ export type ProjectSummaryDto = {
   status: string
   genre: string
   premise: string
+  lifecycleMode: NovelLifecycleModeDto
+  publishedChapterRefs: string[]
+  lockedChapterRefs: string[]
   releaseVersion: string
   lastPublishedAt?: string
   currentSurface: NovelSurfaceId
@@ -58,7 +61,7 @@ export type RevisionIssueDto = {
   chapterId: string
   title: string
   summary: string
-  severity: 'low' | 'medium' | 'high'
+  severity: RiskLevel
   status: 'open' | 'deferred' | 'resolved'
 }
 
@@ -85,7 +88,7 @@ export type RevisionRecordDto = {
 export type ExportPresetDto = {
   presetId: string
   title: string
-  format: 'markdown' | 'pdf' | 'epub'
+  format: 'markdown' | 'epub'
   status: 'draft' | 'ready'
   summary: string
 }
@@ -299,7 +302,7 @@ export type ExportHistoryDto = {
   exportId: string
   presetId: string
   versionTag: string
-  format: 'markdown' | 'pdf' | 'epub'
+  format: 'markdown' | 'epub'
   generatedAt: string
   synopsis: string
   splitChapters: number
@@ -327,6 +330,168 @@ export type ExportComparisonDto = {
   fileCountDelta: number
   addedFeedback: string[]
   removedFeedback: string[]
+}
+
+export type NovelLifecycleModeDto = 'sandbox' | 'timeline'
+
+export type HarnessLayerDto = 'story' | 'character' | 'reader'
+
+export type HarnessSeverityDto = RiskLevel | 'blocking'
+
+export type HarnessProfileDto = {
+  profileId: string
+  projectId: string
+  mode: NovelLifecycleModeDto
+  layers: HarnessLayerDto[]
+  constraints: string[]
+  updatedAt: string
+}
+
+export type HarnessTargetRefDto = {
+  refId: string
+  kind: 'project' | 'chapter' | 'scene' | 'character' | 'canon' | 'foreshadowing' | 'export' | 'feedback'
+  label: string
+}
+
+export type DiagnosticFindingDto = {
+  findingId: string
+  area:
+    | 'structure'
+    | 'pacing'
+    | 'character'
+    | 'foreshadowing'
+    | 'info-gap'
+    | 'continuity'
+    | 'golden-three'
+    | 'worldbuilding'
+    | 'reader-risk'
+    | 'publishing'
+  harnessLayer: HarnessLayerDto
+  severity: HarnessSeverityDto
+  targetRefs: string[]
+  evidence: string[]
+  diagnosis: string
+  recommendation: string
+}
+
+export type DiagnosticReportDto = {
+  reportId: string
+  projectId: string
+  mode: NovelLifecycleModeDto
+  scope: {
+    kind: 'chapter' | 'range' | 'volume' | 'project' | 'golden-three'
+    targetRefs: string[]
+  }
+  summary: string
+  goldenThree?: Record<string, unknown>
+  findings: DiagnosticFindingDto[]
+  generatedAt: string
+  metadata?: Record<string, unknown>
+}
+
+export type ImpactAffectedRefDto = {
+  ref: string
+  kind?: HarnessTargetRefDto['kind']
+  impact: string
+  requiredAction: string
+}
+
+export type ImpactAnalysisDto = {
+  impactId: string
+  projectId: string
+  mode: NovelLifecycleModeDto
+  authorIntent: string
+  sourceChange: string
+  riskLevel: HarnessSeverityDto
+  affectedRefs: ImpactAffectedRefDto[]
+  risks: string[]
+  recommendations: string[]
+  createdAt: string
+  metadata?: Record<string, unknown>
+}
+
+export type IntentPlanOptionDto = {
+  optionId: string
+  label: string
+  summary: string
+  edits: string[]
+  benefits: string[]
+  costs: string[]
+  risks: string[]
+  impactRef?: string
+}
+
+export type IntentPlanDto = {
+  planId: string
+  projectId: string
+  mode: NovelLifecycleModeDto
+  authorIntent: string
+  options: IntentPlanOptionDto[]
+  decision?: {
+    selectedOptionId?: string
+    reason?: string
+    rejectedOptionIds?: string[]
+  }
+  createdAt: string
+  metadata?: Record<string, unknown>
+}
+
+export type ReaderFeedbackMappingDto = {
+  category: 'chapter' | 'character' | 'pacing' | 'canon' | 'foreshadowing' | 'expectation' | 'publish'
+  targetRefs: string[]
+  confidence: number
+  interpretation: string
+  recommendedAction: string
+}
+
+export type ReaderFeedbackDto = {
+  feedbackId: string
+  projectId: string
+  source: string
+  items: Array<{
+    itemId: string
+    summary: string
+    sentiment?: 'positive' | 'neutral' | 'negative' | 'mixed'
+    sourceRef?: string
+  }>
+  mappings: ReaderFeedbackMappingDto[]
+  collectedAt: string
+  metadata?: Record<string, unknown>
+}
+
+export type TimelineIterationDto = {
+  iterationId: string
+  projectId: string
+  trigger: string
+  strategy:
+    | 'retroactive-echo'
+    | 'future-bridge'
+    | 'foreshadowing-recovery'
+    | 'character-reframing'
+    | 'reader-expectation-reset'
+  targetFutureRefs: string[]
+  readOnlyPublishedRefs: string[]
+  readerExperienceRisk: string
+  retconRisk: 'none' | 'low' | 'medium' | 'high'
+  proposalRefs?: string[]
+  createdAt: string
+  metadata?: Record<string, unknown>
+}
+
+export type HarnessLockDto = {
+  lockId: string
+  projectId: string
+  versionTag: string
+  modeBefore: NovelLifecycleModeDto
+  modeAfter: 'timeline'
+  lockedAt: string
+  publishedChapterRefs: string[]
+  lockedChapterRefs: string[]
+  diagnosticReportId?: string
+  unresolvedHighRiskIssueIds: string[]
+  exportManifestPath: string
+  summary: string
+  metadata?: Record<string, unknown>
 }
 
 export type OpenProjectResultDto = {
@@ -426,6 +591,7 @@ export type CreateProjectResultDto = {
 export type WorkspaceShellDto = {
   workspacePath: string
   project: ProjectSummaryDto
+  harnessProfile: HarnessProfileDto
   navigation: NavigationItemDto[]
   chapterTree: ChapterListItemDto[]
   sceneList: SceneListItemDto[]
@@ -445,6 +611,12 @@ export type WorkspaceShellDto = {
   quickActions: QuickActionDto[]
   recentExports: ExportHistoryDto[]
   latestExportComparison?: ExportComparisonDto
+  diagnosticReports: DiagnosticReportDto[]
+  impactAnalyses: ImpactAnalysisDto[]
+  intentPlans: IntentPlanDto[]
+  readerFeedback: ReaderFeedbackDto[]
+  timelineIterations: TimelineIterationDto[]
+  harnessLocks: HarnessLockDto[]
 }
 
 export type ChapterDocumentDto = {
@@ -494,6 +666,19 @@ export type GenerateKnowledgeAnswerInputDto = {
 }
 
 export type GenerateKnowledgeAnswerResultDto = {
+  documentId: string
+  title: string
+  relativePath: string
+  outputPath: string
+  summary: string
+  excerpt: string
+}
+
+export type ImportKnowledgeDocumentInputDto = {
+  filePath: string
+}
+
+export type ImportKnowledgeDocumentResultDto = {
   documentId: string
   title: string
   relativePath: string

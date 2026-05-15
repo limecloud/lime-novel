@@ -53,7 +53,18 @@ export class LocalAgentRuntime implements AgentRuntimePort {
   }
 
   async loadTaskDiagnostics(): Promise<AgentTaskDiagnosticsDto[]> {
-    return [...this.diagnosticsByTaskId.values()].sort((left, right) => {
+    const persistedDiagnostics = await this.getRepository().loadAgentTaskDiagnostics()
+    const diagnosticsByTaskId = new Map(persistedDiagnostics.map((diagnostics) => [diagnostics.taskId, diagnostics]))
+
+    for (const diagnostics of this.diagnosticsByTaskId.values()) {
+      const current = diagnosticsByTaskId.get(diagnostics.taskId)
+
+      if (!current || Date.parse(diagnostics.updatedAt) >= Date.parse(current.updatedAt)) {
+        diagnosticsByTaskId.set(diagnostics.taskId, diagnostics)
+      }
+    }
+
+    return [...diagnosticsByTaskId.values()].sort((left, right) => {
       const leftTime = Date.parse(left.updatedAt)
       const rightTime = Date.parse(right.updatedAt)
 
@@ -63,6 +74,7 @@ export class LocalAgentRuntime implements AgentRuntimePort {
 
   private cacheDiagnostics(diagnostics: AgentTaskDiagnosticsDto): void {
     this.diagnosticsByTaskId.set(diagnostics.taskId, diagnostics)
+    void this.getRepository().upsertAgentTaskDiagnostics(diagnostics).catch(() => undefined)
 
     if (this.diagnosticsByTaskId.size <= MAX_CACHED_TASK_DIAGNOSTICS) {
       return
@@ -95,32 +107,71 @@ export class LocalAgentRuntime implements AgentRuntimePort {
     })
     await session.open()
 
-    const runtimeConfig = await this.resolveRuntimeConfig()
-    await session.updateRunningSummary(buildRuntimeStartSummary(runtimeConfig, input))
-    const provider = createConfiguredLLMProvider(runtimeConfig)
+    void this.runTaskInBackground({
+      repository,
+      shell,
+      input,
+      header,
+      session
+    })
+
+    return { task: session.task }
+  }
+
+  private async runTaskInBackground(input: {
+    repository: ProjectRepositoryPort
+    shell: Awaited<ReturnType<ProjectRepositoryPort['loadWorkspaceShell']>>
+    input: StartTaskInputDto
+    header: ReturnType<typeof createAgentTaskSessionSeed>['header']
+    session: LiveAgentTaskSession
+  }): Promise<void> {
     let executionResult: LiveAgentExecutionResult
 
     try {
+      const runtimeConfig = await this.resolveRuntimeConfig()
+      await input.session.updateRunningSummary(buildRuntimeStartSummary(runtimeConfig, input.input))
+      const provider = createConfiguredLLMProvider(runtimeConfig)
+
       executionResult =
         provider == null
-          ? await executeLegacyAgentSession(repository, shell, input)
+          ? await executeLegacyAgentSession(input.repository, input.shell, input.input)
           : await executeLiveAgentSession({
-              repository,
-              shell,
-              input,
-              task: session.task,
-              header,
+              repository: input.repository,
+              shell: input.shell,
+              input: input.input,
+              task: input.session.task,
+              header: input.header,
               provider,
               config: runtimeConfig,
-              onProgress: session.updateRunningSummary,
-              onDiagnostics: session.publishDiagnostics
+              onProgress: input.session.updateRunningSummary,
+              onDiagnostics: input.session.publishDiagnostics
             })
     } catch (error) {
       executionResult = buildFailedExecutionResult(error)
     }
 
-    const finalTask = await session.commitExecutionResult(shell, input, executionResult)
-    return { task: finalTask }
+    try {
+      await input.session.commitExecutionResult(input.shell, input.input, executionResult)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '代理结果回写失败。'
+
+      try {
+        await input.session.failCommit({
+          detail,
+          stats: executionResult.stats
+        })
+      } catch {
+        input.session.publishDiagnostics({
+          failure: {
+            subtype: 'error_during_execution',
+            detail,
+            turnCount: executionResult.stats.turnCount,
+            usage: executionResult.stats.usage
+          },
+          stats: executionResult.stats
+        })
+      }
+    }
   }
 
   private emit(event: TaskEventDto): void {

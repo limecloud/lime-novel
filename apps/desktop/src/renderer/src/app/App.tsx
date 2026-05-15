@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
+  AgentTaskDto,
   AgentRuntimeConnectionTestResultDto,
   AgentRuntimeSettingsDto,
   AgentRuntimeSettingsStateDto,
   GenerateKnowledgeAnswerInputDto,
-  GenerateKnowledgeAnswerResultDto
+  GenerateKnowledgeAnswerResultDto,
+  ImportKnowledgeDocumentResultDto
 } from '@lime-novel/application'
 import type { FeatureToolId, NovelSurfaceId } from '@lime-novel/domain-novel'
 import { desktopApi } from '../lib/desktop-api'
@@ -29,6 +31,8 @@ const runtimeProviderLabel: Record<AgentRuntimeSettingsStateDto['resolvedProvide
   'openai-compatible': 'OpenAI Compatible'
 }
 
+const terminalAgentTaskStatuses = new Set<AgentTaskDto['status']>(['completed', 'failed', 'waiting_approval'])
+
 export const App = () => {
   const [activeSurface, setActiveSurface] = useState<NovelSurfaceId>('home')
   const [activeFeatureTool, setActiveFeatureTool] = useState<FeatureToolId | undefined>()
@@ -37,6 +41,7 @@ export const App = () => {
   const [backgroundAutomationCount, setBackgroundAutomationCount] = useState(0)
   const lastHydratedWorkspaceKeyRef = useRef<string | null>(null)
   const autoMaintenanceKeysRef = useRef(new Set<string>())
+  const autoMaintenanceBatchesRef = useRef(new Map<string, Set<string>>())
   const feedState = useAgentFeedState()
 
   const shellQuery = useQuery({
@@ -51,6 +56,64 @@ export const App = () => {
 
   const activeWorkspacePath = shellQuery.data?.workspacePath ?? ''
 
+  const syncBackgroundAutomationCount = (): void => {
+    setBackgroundAutomationCount(autoMaintenanceKeysRef.current.size)
+  }
+
+  const resolveAutomationChapterId = (automationKey: string): string => {
+    const [, chapterId] = automationKey.split('::')
+    return chapterId || automationKey
+  }
+
+  const closePostSaveAutomation = (automationKey: string, shouldNotify: boolean): void => {
+    const wasActive = autoMaintenanceKeysRef.current.delete(automationKey)
+    autoMaintenanceBatchesRef.current.delete(automationKey)
+
+    if (!wasActive) {
+      return
+    }
+
+    syncBackgroundAutomationCount()
+
+    if (shouldNotify) {
+      agentFeedStore.addLocalStatus(
+        '后台整理已收口',
+        '设定候选、修订问题或失败提示已经同步到右栏与项目状态。',
+        `章节 ${resolveAutomationChapterId(automationKey)}`
+      )
+    }
+
+    void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+  }
+
+  const settlePostSaveAutomationTask = (task: AgentTaskDto): void => {
+    if (!terminalAgentTaskStatuses.has(task.status)) {
+      return
+    }
+
+    for (const [automationKey, taskIds] of autoMaintenanceBatchesRef.current.entries()) {
+      if (!taskIds.delete(task.taskId)) {
+        continue
+      }
+
+      if (taskIds.size === 0) {
+        closePostSaveAutomation(automationKey, true)
+      }
+
+      return
+    }
+  }
+
+  const reconcilePostSaveAutomation = (tasks: AgentTaskDto[]): void => {
+    if (autoMaintenanceBatchesRef.current.size === 0) {
+      return
+    }
+
+    for (const task of tasks) {
+      settlePostSaveAutomationTask(task)
+    }
+  }
+
   const triggerPostSaveAutomation = (chapterId: string) => {
     if (!activeWorkspacePath) {
       return
@@ -63,7 +126,7 @@ export const App = () => {
     }
 
     autoMaintenanceKeysRef.current.add(automationKey)
-    setBackgroundAutomationCount((count) => count + 1)
+    syncBackgroundAutomationCount()
     agentFeedStore.addLocalStatus(
       '后台整理已启动',
       '设定代理与修订代理正在同步候选卡和问题队列。',
@@ -71,6 +134,8 @@ export const App = () => {
     )
 
     void (async () => {
+      const batchTaskIds = new Set<string>()
+      autoMaintenanceBatchesRef.current.set(automationKey, batchTaskIds)
       const maintenanceTasks: Array<{ surface: NovelSurfaceId; intent: string }> = [
         {
           surface: 'canon',
@@ -84,11 +149,12 @@ export const App = () => {
 
       for (const task of maintenanceTasks) {
         try {
-          await desktopApi.agent.startTask({
+          const result = await desktopApi.agent.startTask({
             surface: task.surface,
             intent: task.intent,
             chapterId
           })
+          batchTaskIds.add(result.task.taskId)
         } catch (error) {
           agentFeedStore.addLocalStatus(
             `${task.surface === 'canon' ? '设定' : '修订'}后台更新失败`,
@@ -98,8 +164,12 @@ export const App = () => {
         }
       }
 
-      autoMaintenanceKeysRef.current.delete(automationKey)
-      setBackgroundAutomationCount((count) => Math.max(0, count - 1))
+      if (batchTaskIds.size === 0) {
+        closePostSaveAutomation(automationKey, false)
+        return
+      }
+
+      reconcilePostSaveAutomation(shellQuery.data?.agentTasks ?? [])
       void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
     })()
   }
@@ -123,23 +193,23 @@ export const App = () => {
 
       if (runtimeState?.mode === 'legacy') {
         agentFeedStore.addLocalStatus(
-          '当前任务仍在本地规则模式',
-          `${result.task.title} 已启动，但这次没有调用真实模型。`,
-          '打开工作台设置，接入 Claude / Anthropic 后，再发起新任务。'
+          '规则代理任务已提交',
+          `${result.task.title} 正在使用本地规则链路执行。`,
+          '可生成正文提议、设定候选、修订问题和发布检查；接入模型后会升级为 live runtime。'
         )
         return
       }
 
       if (runtimeState) {
         agentFeedStore.addLocalStatus(
-          '代理任务已启动',
-          `${result.task.title} 已接入 ${runtimeProviderLabel[runtimeState.resolvedProvider]}。`,
+          '代理任务已提交',
+          `${result.task.title} 已接入 ${runtimeProviderLabel[runtimeState.resolvedProvider]}，正在后台执行。`,
           `${runtimeState.resolvedModel} · ${result.task.summary}`
         )
         return
       }
 
-      agentFeedStore.addLocalStatus('代理任务已启动', result.task.title, result.task.summary)
+      agentFeedStore.addLocalStatus('代理任务已提交', result.task.title, result.task.summary)
     },
     onError: (error) => {
       agentFeedStore.addLocalStatus(
@@ -207,6 +277,28 @@ export const App = () => {
         '知识问答生成失败',
         error instanceof Error ? error.message : '当前问题暂时无法写入知识输出目录。',
         '请换个问法，或先补充更多项目资料'
+      )
+    }
+  })
+
+  const importKnowledgeDocumentMutation = useMutation({
+    mutationFn: (): Promise<ImportKnowledgeDocumentResultDto | null> => desktopApi.knowledge.importDocument(),
+    onSuccess: async (result) => {
+      if (!result) {
+        return
+      }
+
+      setActiveSurface('knowledge')
+      setActiveFeatureTool(undefined)
+      setSidebarMode(resolveSidebarModeForSurface('knowledge'))
+      await queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      agentFeedStore.addLocalStatus('知识资料已导入', result.summary, result.relativePath)
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        '导入知识资料失败',
+        error instanceof Error ? error.message : '当前资料暂时无法写入知识库。',
+        '请选择一个 .txt 或 .md 文件后重试'
       )
     }
   })
@@ -426,6 +518,11 @@ export const App = () => {
   useEffect(() => {
     const unsubscribe = desktopApi.agent.subscribeTaskEvents((event) => {
       agentFeedStore.applyEvent(event)
+
+      if (event.type === 'task.updated') {
+        settlePostSaveAutomationTask(event.task)
+      }
+
       void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
     })
 
@@ -433,6 +530,14 @@ export const App = () => {
       unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (!shellQuery.data) {
+      return
+    }
+
+    reconcilePostSaveAutomation(shellQuery.data.agentTasks)
+  }, [shellQuery.data])
 
   useEffect(() => {
     const shell = shellQuery.data
@@ -527,6 +632,10 @@ export const App = () => {
       return '正在导入爆款样本'
     }
 
+    if (importKnowledgeDocumentMutation.isPending) {
+      return '正在导入知识资料'
+    }
+
     if (applyProjectStrategyProposalMutation.isPending) {
       return '正在回写项目策略'
     }
@@ -579,6 +688,7 @@ export const App = () => {
     createExportPackageMutation.isPending,
     generateKnowledgeAnswerMutation.isPending,
     importAnalysisSampleMutation.isPending,
+    importKnowledgeDocumentMutation.isPending,
     openProjectMutation.isPending,
     rejectProposalMutation.isPending,
     saveChapterMutation.isPending,
@@ -636,6 +746,7 @@ export const App = () => {
       isCreatingProject={createProjectMutation.isPending}
       isOpeningProject={openProjectMutation.isPending}
       isImportingAnalysisSample={importAnalysisSampleMutation.isPending}
+      isImportingKnowledgeDocument={importKnowledgeDocumentMutation.isPending}
       isApplyingAnalysisStrategy={applyProjectStrategyProposalMutation.isPending}
       isCreatingExportPackage={createExportPackageMutation.isPending}
       isGeneratingKnowledgeAnswer={generateKnowledgeAnswerMutation.isPending}
@@ -754,6 +865,9 @@ export const App = () => {
         createExportPackageMutation.mutate(payload)
       }}
       onCreateKnowledgeAnswer={(payload) => generateKnowledgeAnswerMutation.mutateAsync(payload)}
+      onImportKnowledgeDocument={() => {
+        importKnowledgeDocumentMutation.mutate()
+      }}
       onSaveAgentSettings={(input) => {
         saveAgentSettingsMutation.mutate(input)
       }}

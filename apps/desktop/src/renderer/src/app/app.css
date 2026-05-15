@@ -1992,6 +1992,11 @@ input {
   color: var(--red);
 }
 
+.severity-badge--blocking {
+  background: rgba(96, 26, 21, 0.18);
+  color: #7d1f17;
+}
+
 .callout {
   padding: 14px 16px;
   border-radius: 16px;

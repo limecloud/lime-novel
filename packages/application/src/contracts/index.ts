@@ -13,6 +13,7 @@ import type {
   CreateExportPackageResultDto,
   GenerateKnowledgeAnswerInputDto,
   GenerateKnowledgeAnswerResultDto,
+  ImportKnowledgeDocumentResultDto,
   ImportAnalysisSampleResultDto,
   KnowledgeDocumentDetailDto,
   OpenProjectResultDto,
@@ -44,6 +45,7 @@ export type DesktopApiContract = {
   knowledge: {
     loadDocument: (relativePath: string) => Promise<KnowledgeDocumentDetailDto>
     generateAnswer: (input: GenerateKnowledgeAnswerInputDto) => Promise<GenerateKnowledgeAnswerResultDto>
+    importDocument: () => Promise<ImportKnowledgeDocumentResultDto | null>
   }
   chapter: {
     loadDocument: (chapterId: string) => Promise<ChapterDocumentDto>

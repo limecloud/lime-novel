@@ -11,6 +11,7 @@ import {
   createCreateExportPackageUseCase,
   createGenerateKnowledgeAnswerUseCase,
   createImportAnalysisSampleUseCase,
+  createImportKnowledgeDocumentUseCase,
   createLoadKnowledgeDocumentUseCase,
   createLoadChapterDocumentUseCase,
   createLoadWorkspaceShellUseCase,
@@ -163,6 +164,27 @@ export const createDesktopServices = async () => {
     loadKnowledgeDocument: (relativePath: string) => createLoadKnowledgeDocumentUseCase(repository)(relativePath),
     generateKnowledgeAnswer: (input: Parameters<ReturnType<typeof createGenerateKnowledgeAnswerUseCase>>[0]) =>
       createGenerateKnowledgeAnswerUseCase(repository)(input),
+    importKnowledgeDocument: async () => {
+      const result = await dialog.showOpenDialog({
+        title: '导入知识资料',
+        properties: ['openFile'],
+        buttonLabel: '导入到 raw/research',
+        filters: [
+          {
+            name: '文本文件',
+            extensions: ['txt', 'md', 'markdown']
+          }
+        ]
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return null
+      }
+
+      return createImportKnowledgeDocumentUseCase(repository)({
+        filePath: result.filePaths[0]
+      })
+    },
     updateWorkspaceContext: (input: Parameters<ReturnType<typeof createUpdateWorkspaceContextUseCase>>[0]) =>
       createUpdateWorkspaceContextUseCase(repository)(input),
     createProject: async (input: Parameters<ReturnType<typeof createCreateProjectWorkspaceUseCase>>[0]) => {

@@ -8,7 +8,8 @@ export const CHANNELS = {
   },
   knowledge: {
     loadDocument: 'knowledge:load-document',
-    generateAnswer: 'knowledge:generate-answer'
+    generateAnswer: 'knowledge:generate-answer',
+    importDocument: 'knowledge:import-document'
   },
   chapter: {
     loadDocument: 'chapter:load-document',

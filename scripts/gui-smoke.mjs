@@ -13,6 +13,7 @@ let startTimeout = null
 
 const child = spawn(START_COMMAND, START_ARGS, {
   stdio: ['ignore', 'pipe', 'pipe'],
+  detached: process.platform !== 'win32',
   env: {
     ...process.env,
     CI: process.env.CI ?? 'true'
@@ -40,10 +41,26 @@ const finish = (code, message) => {
   cleanupTimers()
 
   if (child.exitCode === null && child.killed === false) {
-    child.kill('SIGTERM')
+    if (process.platform === 'win32') {
+      child.kill('SIGTERM')
+    } else {
+      try {
+        process.kill(-child.pid, 'SIGTERM')
+      } catch {
+        child.kill('SIGTERM')
+      }
+    }
     setTimeout(() => {
       if (child.exitCode === null) {
-        child.kill('SIGKILL')
+        if (process.platform === 'win32') {
+          child.kill('SIGKILL')
+        } else {
+          try {
+            process.kill(-child.pid, 'SIGKILL')
+          } catch {
+            child.kill('SIGKILL')
+          }
+        }
       }
     }, 1500).unref()
   }

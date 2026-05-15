@@ -31,6 +31,7 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   removeHandler(CHANNELS.workspace.openProjectDialog)
   removeHandler(CHANNELS.knowledge.loadDocument)
   removeHandler(CHANNELS.knowledge.generateAnswer)
+  removeHandler(CHANNELS.knowledge.importDocument)
   removeHandler(CHANNELS.chapter.loadDocument)
   removeHandler(CHANNELS.chapter.saveDocument)
   removeHandler(CHANNELS.chapter.applyProposal)
@@ -64,6 +65,7 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   ipcMain.handle(CHANNELS.knowledge.generateAnswer, async (_event, input: GenerateKnowledgeAnswerInputDto) =>
     services.generateKnowledgeAnswer(input)
   )
+  ipcMain.handle(CHANNELS.knowledge.importDocument, async () => services.importKnowledgeDocument())
   ipcMain.handle(CHANNELS.chapter.loadDocument, async (_event, chapterId: string) =>
     services.loadChapterDocument(chapterId)
   )

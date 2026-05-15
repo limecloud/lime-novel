@@ -2,7 +2,7 @@
 
 Lime Novel 是一个面向长篇小说创作的 AI Agent 桌面工作台，围绕“写作、设定、修订、发布”四条主链，把正文编辑器、章节代理、设定记忆和发布整理收在同一套本地优先的 Electron 桌面壳里。
 
-当前仓库版本基线已提升到 `0.3.0`，并补齐了适合桌面应用的发布流水线：
+当前仓库版本基线已提升到 `0.5.0`，并补齐了适合桌面应用的发布流水线：
 
 - `Quality`：面向 `pull_request`、`push main` 和手动触发的持续集成校验
 - `Release`：面向 `v*.*.*` tag 或手动触发的跨平台桌面构建与 GitHub Draft Release
@@ -112,10 +112,10 @@ npm run dist:linux
 仓库提供了统一版本同步脚本，会同时更新根包与所有 workspace 子包：
 
 ```bash
-node scripts/sync-version.mjs 0.3.0
+node scripts/sync-version.mjs 0.5.0
 ```
 
-当前建议的发布标签是 `v0.3.0`。
+当前建议的发布标签是 `v0.5.0`。
 
 ## CI / CD
 
@@ -145,7 +145,7 @@ node scripts/sync-version.mjs 0.3.0
 手动触发参数：
 
 - `tag`
-  目标版本标签，例如 `v0.3.0`
+  目标版本标签，例如 `v0.5.0`
 - `source_ref`
   构建来源，默认 `main`
 - `platform`
@@ -162,8 +162,8 @@ node scripts/sync-version.mjs 0.3.0
 当前默认产物：
 
 - Windows：`nsis`、`zip`
-- macOS ARM64：`lime-novel-v0.3.0-macos-arm64.dmg`、`lime-novel-v0.3.0-macos-arm64.zip`
-- macOS x64：`lime-novel-v0.3.0-macos-x64.dmg`、`lime-novel-v0.3.0-macos-x64.zip`
+- macOS ARM64：`lime-novel-v0.5.0-macos-arm64.dmg`、`lime-novel-v0.5.0-macos-arm64.zip`
+- macOS x64：`lime-novel-v0.5.0-macos-x64.dmg`、`lime-novel-v0.5.0-macos-x64.zip`
 - Linux：`AppImage`、`tar.gz`
 
 说明：
@@ -178,7 +178,7 @@ node scripts/sync-version.mjs 0.3.0
 
 ```bash
 npm ci
-node scripts/sync-version.mjs 0.3.0
+node scripts/sync-version.mjs 0.5.0
 npm run verify:local
 npm run verify:gui-smoke
 ```
@@ -186,12 +186,12 @@ npm run verify:gui-smoke
 正式发布：
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.5.0
+git push origin v0.5.0
 ```
 
 也可以直接在 GitHub Actions 里手动运行 `Release`，指定：
 
-- `tag = v0.3.0`
+- `tag = v0.5.0`
 - `source_ref = main`
 - `platform = all`

@@ -13,6 +13,7 @@ import { normalizeRuntimeSurface } from './agent-surface-policy'
 import { buildLegacyAnalysisSubmittedResult } from './legacy-analysis-result-builder'
 import { buildLegacyCanonSubmittedResult } from './legacy-canon-result-builder'
 import { buildLegacyHomeSubmittedResult } from './legacy-home-result-builder'
+import { buildLegacyHarnessSubmittedResultIfMatched } from './legacy-harness-result-builder'
 import { buildLegacyKnowledgeSubmittedResult } from './legacy-knowledge-result-builder'
 import { buildLegacyPublishSubmittedResult } from './legacy-publish-result-builder'
 import { buildLegacyRevisionSubmittedResult } from './legacy-revision-result-builder'
@@ -37,6 +38,11 @@ export const buildLegacySubmittedTaskResult = async (
     repository,
     shell,
     input
+  }
+  const harnessResult = await buildLegacyHarnessSubmittedResultIfMatched(context)
+
+  if (harnessResult) {
+    return harnessResult
   }
 
   return legacySubmittedResultBuilders[normalizeRuntimeSurface(input.surface)](

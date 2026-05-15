@@ -7,6 +7,7 @@ import { createLivePersistenceTools } from './live-agent-persistence-tools'
 import {
   createSubmitTaskResultTool
 } from './live-agent-result-tool'
+import { createLiveHarnessTools } from './live-agent-harness-tools'
 import { createLiveWorkspaceTools } from './live-agent-workspace-tools'
 
 export const createLiveAgentTools = (
@@ -14,6 +15,7 @@ export const createLiveAgentTools = (
 ): AgentTool<unknown, unknown>[] => [
   ...createLiveWorkspaceTools(context),
   ...createLivePersistenceTools(context),
+  ...createLiveHarnessTools(context),
   createSubmitTaskResultTool()
 ]
 
