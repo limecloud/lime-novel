@@ -31,6 +31,9 @@ export const CHANNELS = {
   publish: {
     createExportPackage: 'publish:create-export-package'
   },
+  harness: {
+    runCommand: 'harness:run-command'
+  },
   agent: {
     loadSettings: 'agent:load-settings',
     saveSettings: 'agent:save-settings',

@@ -132,7 +132,7 @@ export const buildExpectedPublishAssets = (preset?: ExportPresetDto): Array<{ la
       detail: '平台反馈与预检提示，便于下次复盘。'
     },
     {
-      label: 'manifest.json',
+      label: '导出清单',
       detail: '版本、预设、资产路径与反馈清单。'
     }
   ]

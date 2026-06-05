@@ -58,7 +58,7 @@ export const CanonSurface = ({ shell, canon, onStartTask, onCommitCanonCard }: C
             className={canon.canonView === 'harness' ? 'pill-button pill-button--active' : 'pill-button'}
             onClick={() => canon.onCanonViewChange('harness')}
           >
-            Harness
+            故事状态
           </button>
         </div>
       </section>

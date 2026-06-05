@@ -6,6 +6,7 @@ import type {
   CreateProjectInputDto,
   CreateExportPackageInputDto,
   GenerateKnowledgeAnswerInputDto,
+  HarnessCommandInputDto,
   SaveChapterInputDto,
   StartTaskInputDto,
   UpdateRevisionIssueInputDto,
@@ -42,6 +43,7 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   removeHandler(CHANNELS.revision.updateIssue)
   removeHandler(CHANNELS.revision.undoRecord)
   removeHandler(CHANNELS.publish.createExportPackage)
+  removeHandler(CHANNELS.harness.runCommand)
   removeHandler(CHANNELS.agent.loadSettings)
   removeHandler(CHANNELS.agent.saveSettings)
   removeHandler(CHANNELS.agent.testSettings)
@@ -91,6 +93,9 @@ export const registerDesktopIpc = (mainWindow: BrowserWindow, services: DesktopS
   ipcMain.handle(CHANNELS.revision.undoRecord, async (_event, recordId: string) => services.undoRevisionRecord(recordId))
   ipcMain.handle(CHANNELS.publish.createExportPackage, async (_event, input: CreateExportPackageInputDto) =>
     services.createExportPackage(input)
+  )
+  ipcMain.handle(CHANNELS.harness.runCommand, async (_event, input: HarnessCommandInputDto) =>
+    services.runHarnessCommand(input)
   )
   ipcMain.handle(CHANNELS.agent.loadSettings, async () => services.loadAgentRuntimeSettings())
   ipcMain.handle(CHANNELS.agent.saveSettings, async (_event, input: AgentRuntimeSettingsDto) =>

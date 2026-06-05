@@ -271,6 +271,11 @@ export type AgentRuntimeSettingsStateDto = {
   resolvedBaseUrl: string
   resolvedModel: string
   mode: 'legacy' | 'live'
+  appServer?: {
+    mode: 'external' | 'unconfigured'
+    binaryPath?: string
+    backendCommand?: string
+  }
 }
 
 export type AgentRuntimeConnectionTestResultDto = {
@@ -494,6 +499,379 @@ export type HarnessLockDto = {
   metadata?: Record<string, unknown>
 }
 
+export type StoryChangeEventKindDto =
+  | 'chapter-saved'
+  | 'story-sync-requested'
+  | 'character-line-updated'
+  | 'foreshadowing-checked'
+  | 'revision-impact-analyzed'
+  | 'platform-risk-checked'
+  | 'platform-risk-updated'
+  | 'reader-feedback-imported'
+  | 'change-set-undone'
+  | 'derived-state-undone'
+
+export type StoryChangeEventDto = {
+  eventId: string
+  projectId: string
+  kind: StoryChangeEventKindDto
+  sourceRef: HarnessTargetRefDto
+  changedRefs: HarnessTargetRefDto[]
+  summary: string
+  createdAt: string
+  metadata?: Record<string, unknown>
+}
+
+export type StoryEventDto = {
+  eventId: string
+  projectId: string
+  chapterId?: string
+  title: string
+  summary: string
+  evidenceRefs: string[]
+  occurredAt: string
+}
+
+export type StoryContextBundleSourceDto = {
+  sourceId: string
+  kind: HarnessTargetRefDto['kind'] | 'knowledge' | 'skill' | 'platform-rule'
+  refId: string
+  label: string
+  reason: string
+  excerpt?: string
+  missing?: boolean
+}
+
+export type StoryContextBundleDto = {
+  bundleId: string
+  projectId: string
+  triggerEventId: string
+  taskId?: string
+  sources: StoryContextBundleSourceDto[]
+  missingSources: string[]
+  selectedReason: string
+  createdAt: string
+}
+
+export type HarnessTaskKindDto =
+  | 'sync-story-state'
+  | 'update-character-line'
+  | 'check-foreshadowing'
+  | 'analyze-revision-impact'
+  | 'check-platform-risk'
+  | 'import-reader-feedback'
+  | 'undo-change-set'
+  | 'undo-derived-state'
+
+export type HarnessBusinessObjectRefDto = HarnessTargetRefDto & {
+  objectPath?: string
+}
+
+export type HarnessTaskRunDto = {
+  taskId: string
+  taskKind: HarnessTaskKindDto
+  title: string
+  status: TaskStatus | 'blocked'
+  businessObjectRef: HarnessBusinessObjectRefDto
+  contextBundleId?: string
+  skillRefs: Array<{
+    skillId: string
+    version: string
+  }>
+  riskLevel: HarnessSeverityDto
+  createdAt: string
+  updatedAt: string
+  metadata?: Record<string, unknown>
+}
+
+export type HarnessActionDecisionDto = 'auto-apply' | 'requires-confirmation' | 'blocked'
+
+export type HarnessActionDto = {
+  actionId: string
+  taskId: string
+  actionType:
+    | 'write-derived-state'
+    | 'write-chapter'
+    | 'raise-risk'
+    | 'create-change-set'
+    | 'create-protection-point'
+    | 'undo-change-set'
+  targetRef: HarnessTargetRefDto
+  decision: HarnessActionDecisionDto
+  status: 'pending' | 'applied' | 'blocked' | 'undone'
+  summary: string
+  riskLevel: HarnessSeverityDto
+  createdAt: string
+}
+
+export type HarnessEvidenceDto = {
+  evidenceId: string
+  sourceRef: HarnessTargetRefDto
+  summary: string
+  locator?: string
+  excerpt?: string
+  createdAt: string
+}
+
+export type HarnessArtifactDto = {
+  artifactId: string
+  taskId: string
+  kind:
+    | 'context-bundle'
+    | 'character-state'
+    | 'foreshadowing-state'
+    | 'impact-analysis'
+    | 'platform-risk'
+    | 'reader-feedback'
+    | 'change-set'
+    | 'sync-summary'
+  title: string
+  summary: string
+  evidenceIds: string[]
+  refId?: string
+  createdAt: string
+}
+
+export type ProjectionDto = {
+  projectionId: string
+  kind: 'story-state' | 'character-line' | 'foreshadowing-line' | 'publish-risk' | 'time-machine'
+  title: string
+  summary: string
+  sourceArtifactIds: string[]
+  updatedAt: string
+}
+
+export type IntentRunDto = {
+  runId: string
+  projectId: string
+  taskId: string
+  authorIntent: string
+  status: 'running' | 'completed' | 'waiting-confirmation' | 'failed' | 'undone'
+  protectionPointId?: string
+  changeSetIds: string[]
+  createdAt: string
+  completedAt?: string
+}
+
+export type ProtectionPointDto = {
+  pointId: string
+  projectId: string
+  label: string
+  summary: string
+  chapterRefs: string[]
+  derivedStateRefs: string[]
+  snapshotPath: string
+  createdAt: string
+}
+
+export type StoryPatchDto = {
+  patchId: string
+  targetKind: 'chapter' | 'character-state' | 'foreshadowing-state' | 'platform-risk' | 'reader-feedback'
+  targetRef: HarnessTargetRefDto
+  objectId?: string
+  riskLevel: HarnessSeverityDto
+  status: 'pending' | 'auto-applied' | 'blocked' | 'undone'
+  before?: unknown
+  after?: unknown
+  evidenceIds: string[]
+  summary: string
+}
+
+export type ChangeSetDto = {
+  changeSetId: string
+  projectId: string
+  intentRunId?: string
+  protectionPointId?: string
+  contextBundleId?: string
+  skillRefs?: Array<{
+    skillId: string
+    version: string
+  }>
+  title: string
+  summary: string
+  status: 'pending' | 'applied' | 'blocked' | 'undone'
+  riskLevel: HarnessSeverityDto
+  patches: StoryPatchDto[]
+  affectedRefs: HarnessTargetRefDto[]
+  createdAt: string
+  appliedAt?: string
+  undoneAt?: string
+}
+
+export type DraftBranchDto = {
+  branchId: string
+  projectId: string
+  label: string
+  status: 'drafting' | 'accepted' | 'discarded'
+  baseProtectionPointId: string
+  changeSetIds: string[]
+  createdAt: string
+  closedAt?: string
+}
+
+export type SkillCategoryDto = 'character' | 'foreshadowing' | 'compliance' | 'revision' | 'reader' | 'style'
+
+export type SkillMetadataDto = {
+  skillId: string
+  version: string
+  title: string
+  description: string
+  category: SkillCategoryDto
+  enabled: boolean
+  source: 'built-in' | 'project'
+  sourcePath?: string
+  updatedAt: string
+}
+
+export type SkillRunDto = {
+  runId: string
+  skillId: string
+  version: string
+  taskId: string
+  status: 'completed' | 'failed' | 'blocked'
+  summary: string
+  createdAt: string
+}
+
+export type CharacterCurrentStateDto = {
+  stateId: string
+  characterId: string
+  name: string
+  currentGoal: string
+  situation: string
+  relationshipPressure: string
+  knownInformation: string[]
+  confidence: number
+  evidenceChapterIds: string[]
+  updatedAt: string
+}
+
+export type ForeshadowingLifecycleStatusDto = 'planted' | 'deepened' | 'misdirected' | 'resolved' | 'overdue' | 'needs-confirmation'
+
+export type ForeshadowingStateDto = {
+  threadId: string
+  title: string
+  status: ForeshadowingLifecycleStatusDto
+  plantedChapterId: string
+  latestChapterId: string
+  evidence: string[]
+  nextAction: string
+  confidence: number
+  updatedAt: string
+}
+
+export type PlatformRiskDto = {
+  riskId: string
+  platform: 'fanqie' | 'qidian' | 'general'
+  ruleSource: string
+  sourceUpdatedAt?: string
+  locationRef: HarnessTargetRefDto
+  severity: HarnessSeverityDto
+  status: 'open' | 'exempted' | 'resolved'
+  contextReason: string
+  suggestion: string
+  skillId: string
+  skillVersion: string
+  createdAt: string
+  authorDecision?: {
+    status: 'exempted' | 'resolved'
+    reason: string
+    decidedAt: string
+  }
+}
+
+export type StorySyncRunDto = {
+  syncRunId: string
+  projectId: string
+  status: 'running' | 'completed' | 'failed' | 'undone'
+  trigger: 'chapter-save' | 'manual' | 'publish-check'
+  protectionPointId: string
+  contextBundleIds: string[]
+  changeSetId?: string
+  syncedChapterIds: string[]
+  syncedCharacterIds: string[]
+  syncedForeshadowingIds: string[]
+  failedTasks: Array<{
+    taskKind: HarnessTaskKindDto
+    reason: string
+  }>
+  summary: string
+  createdAt: string
+  completedAt?: string
+}
+
+export type StoryStateDashboardDto = {
+  currentProgress: string
+  mainPressure: string
+  primaryCharacterStates: CharacterCurrentStateDto[]
+  unresolvedForeshadowing: ForeshadowingStateDto[]
+  pacingRisks: DiagnosticFindingDto[]
+  readerExpectations: ReaderFeedbackMappingDto[]
+  platformRisks: PlatformRiskDto[]
+  nextChapterMoves: string[]
+  latestContextBundle?: StoryContextBundleDto
+  recentChangeEvents: StoryChangeEventDto[]
+  recentSyncRuns: StorySyncRunDto[]
+  pendingActions: HarnessActionDto[]
+  protectionPoints: ProtectionPointDto[]
+  changeSets: ChangeSetDto[]
+  enabledSkills: SkillMetadataDto[]
+}
+
+export type HarnessCommandInputDto =
+  | {
+      command: 'sync-story-state'
+      chapterId?: string
+      intent?: string
+      triggerEventId?: string
+    }
+  | {
+      command: 'update-character-line' | 'check-foreshadowing' | 'analyze-revision-impact'
+      chapterId?: string
+      intent?: string
+    }
+  | {
+      command: 'check-platform-risk'
+      chapterId?: string
+      platform?: PlatformRiskDto['platform']
+      intent?: string
+    }
+  | {
+      command: 'import-reader-feedback'
+      comments: string
+      source?: string
+    }
+  | {
+      command: 'toggle-skill'
+      skillId: string
+      enabled: boolean
+    }
+  | {
+      command: 'update-platform-risk'
+      riskId: string
+      status: 'exempted' | 'resolved'
+      reason?: string
+    }
+  | {
+      command: 'undo-change-set'
+      changeSetId: string
+    }
+  | {
+      command: 'undo-derived-state'
+      changeSetId?: string
+    }
+
+export type HarnessCommandResultDto = {
+  command: HarnessCommandInputDto['command']
+  summary: string
+  taskId?: string
+  protectionPointId?: string
+  contextBundleId?: string
+  changeSetId?: string
+  syncRunId?: string
+  affectedRefs: HarnessTargetRefDto[]
+}
+
 export type OpenProjectResultDto = {
   workspacePath: string
   projectId: string
@@ -561,6 +939,8 @@ export type WorkspaceSearchItemDto = {
     | 'export-preset'
     | 'knowledge-document'
     | 'knowledge-output'
+    | 'story-state'
+    | 'platform-risk'
   title: string
   snippet: string
   surface: NovelSurfaceId
@@ -617,6 +997,25 @@ export type WorkspaceShellDto = {
   readerFeedback: ReaderFeedbackDto[]
   timelineIterations: TimelineIterationDto[]
   harnessLocks: HarnessLockDto[]
+  storyEvents: StoryEventDto[]
+  storyChangeEvents: StoryChangeEventDto[]
+  storyContextBundles: StoryContextBundleDto[]
+  harnessTasks: HarnessTaskRunDto[]
+  harnessActions: HarnessActionDto[]
+  harnessArtifacts: HarnessArtifactDto[]
+  harnessEvidence: HarnessEvidenceDto[]
+  projections: ProjectionDto[]
+  intentRuns: IntentRunDto[]
+  protectionPoints: ProtectionPointDto[]
+  changeSets: ChangeSetDto[]
+  draftBranches: DraftBranchDto[]
+  skillCatalog: SkillMetadataDto[]
+  skillRuns: SkillRunDto[]
+  characterStates: CharacterCurrentStateDto[]
+  foreshadowingStates: ForeshadowingStateDto[]
+  platformRisks: PlatformRiskDto[]
+  storySyncRuns: StorySyncRunDto[]
+  storyState: StoryStateDashboardDto
 }
 
 export type ChapterDocumentDto = {
@@ -754,10 +1153,15 @@ export type ApplyProjectStrategyProposalResultDto = {
   summary: string
 }
 
+export type StartTaskRuntimeOptionsDto = {
+  metadata?: Record<string, unknown>
+}
+
 export type StartTaskInputDto = {
   surface: NovelSurfaceId
   intent: string
   chapterId?: string
+  runtimeOptions?: StartTaskRuntimeOptionsDto
 }
 
 export type StartTaskResultDto = {

@@ -13,6 +13,8 @@ import type {
   CreateExportPackageResultDto,
   GenerateKnowledgeAnswerInputDto,
   GenerateKnowledgeAnswerResultDto,
+  HarnessCommandInputDto,
+  HarnessCommandResultDto,
   ImportKnowledgeDocumentResultDto,
   ImportAnalysisSampleResultDto,
   KnowledgeDocumentDetailDto,
@@ -68,6 +70,9 @@ export type DesktopApiContract = {
   }
   publish: {
     createExportPackage: (input: CreateExportPackageInputDto) => Promise<CreateExportPackageResultDto>
+  }
+  harness: {
+    runCommand: (input: HarnessCommandInputDto) => Promise<HarnessCommandResultDto>
   }
   agent: {
     loadSettings: () => Promise<AgentRuntimeSettingsStateDto>

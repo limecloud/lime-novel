@@ -18,6 +18,21 @@ type PublishSurfaceProps = {
   onCreateExportPackage: (input: CreateExportPackageInputDto) => void
 }
 
+const platformRiskSeverityLabel: Record<WorkspaceShellDto['platformRisks'][number]['severity'], string> = {
+  low: '低',
+  medium: '中',
+  high: '高',
+  blocking: '阻断'
+}
+
+const platformRiskPlatformLabel: Record<WorkspaceShellDto['platformRisks'][number]['platform'], string> = {
+  fanqie: '番茄',
+  qidian: '起点',
+  general: '通用平台'
+}
+
+const exportBlockingSeverity = new Set<WorkspaceShellDto['platformRisks'][number]['severity']>(['high', 'blocking'])
+
 export const PublishSurface = ({
   shell,
   publish,
@@ -34,8 +49,11 @@ export const PublishSurface = ({
   const splitValue = Number.parseInt(publish.exportSplit, 10) || 3
   const latestExport = shell.recentExports[0]
   const latestExportComparison = shell.latestExportComparison
-  const latestHarnessLock = shell.harnessLocks[0]
-  const lifecycleLabel = shell.project.lifecycleMode === 'timeline' ? 'Timeline 时间线' : 'Sandbox 沙盘'
+  const latestPublishLock = shell.harnessLocks[0]
+  const blockingOpenPlatformRisks = shell.platformRisks.filter(
+    (risk) => risk.status === 'open' && exportBlockingSeverity.has(risk.severity)
+  )
+  const lifecycleLabel = shell.project.lifecycleMode === 'timeline' ? '已发布只读' : '试写沙盘'
   const expectedAssets = buildExpectedPublishAssets(preset)
   const comparisonNotes = buildPublishComparisonNotes(shell, {
     versionTag: publish.versionTag.trim() || suggestNextPublishVersion(shell),
@@ -46,13 +64,14 @@ export const PublishSurface = ({
   const canConfirmExport = Boolean(preset && publish.synopsis.trim() && publish.versionTag.trim())
   const isSynopsisDraftApplied = synopsisDraft?.body.trim() === publish.synopsis.trim()
   const isNotesDraftApplied = notesDraft?.body.trim() === publish.notes.trim()
+  const hasBlockingOpenPlatformRisks = blockingOpenPlatformRisks.length > 0
 
   return (
     <div className="surface-stack">
       <section className="surface-hero surface-hero--publish">
         <div className="surface-hero__meta-bar">
           <span>当前版本：{shell.project.releaseVersion}</span>
-          <span>Harness：{lifecycleLabel}</span>
+          <span>保护边界：{lifecycleLabel}</span>
           <span>建议版本：{suggestNextPublishVersion(shell)}</span>
           <span>{latestExport ? `最近导出：${latestExport.versionTag}` : '最近导出：暂无'}</span>
         </div>
@@ -77,8 +96,8 @@ export const PublishSurface = ({
       <article className="surface-card">
         <div className="surface-card__header">
           <div>
-            <span className="eyebrow">Harness Lock</span>
-            <h3>{latestHarnessLock ? `已锁定 ${latestHarnessLock.versionTag}` : '发布前锁定准备'}</h3>
+            <span className="eyebrow">发布锁定</span>
+            <h3>{latestPublishLock ? `已锁定 ${latestPublishLock.versionTag}` : '发布前锁定准备'}</h3>
           </div>
           <span className="status-chip">
             {shell.project.lifecycleMode === 'timeline' ? '已进入时间线' : '等待发布锁定'}
@@ -88,20 +107,20 @@ export const PublishSurface = ({
           <div className="detail-list__item">
             <strong>锁定边界</strong>
             <span>
-              {latestHarnessLock
-                ? `${latestHarnessLock.lockedChapterRefs.length} 个章节只读`
-                : '确认导出时会创建 Harness Lock，并把当前导出章节切入只读时间线。'}
+              {latestPublishLock
+                ? `${latestPublishLock.lockedChapterRefs.length} 个章节只读`
+                : '确认导出时会创建发布锁定，并把当前导出章节切入只读时间线。'}
             </span>
           </div>
           <div className="detail-list__item">
             <strong>最近体检</strong>
-            <span>{latestHarnessLock?.diagnosticReportId ?? '还没有绑定体检报告，建议先让修订代理做一次发布前体检。'}</span>
+            <span>{latestPublishLock?.diagnosticReportId ?? '还没有绑定体检报告，建议先让修订代理做一次发布前体检。'}</span>
           </div>
           <div className="detail-list__item">
             <strong>高风险问题</strong>
             <span>
-              {latestHarnessLock
-                ? `${latestHarnessLock.unresolvedHighRiskIssueIds.length} 个未解决`
+              {latestPublishLock
+                ? `${latestPublishLock.unresolvedHighRiskIssueIds.length} 个未解决`
                 : `${shell.revisionIssues.filter((issue) => issue.severity === 'high').length} 个待确认`}
             </span>
           </div>
@@ -109,7 +128,7 @@ export const PublishSurface = ({
         <div className="hero-actions">
           <button
             className="ghost-button"
-            onClick={() => onStartTask('请执行发布前 Harness Lock 预检：汇总最新体检、冲击波、高风险 issue 和即将只读的章节。')}
+            onClick={() => onStartTask('请执行发布前锁定预检：汇总最新体检、冲击波、高风险 issue 和即将只读的章节。')}
           >
             让代理做锁定预检
           </button>
@@ -322,7 +341,7 @@ export const PublishSurface = ({
             ) : (
               <div className="empty-state">
                 <strong>还没有真实导出资产</strong>
-                <span>完成首个导出后，这里会列出 manifest 里记录的实际产物清单。</span>
+                <span>完成首个导出后，这里会列出清单文件里记录的实际产物。</span>
               </div>
             )}
           </div>
@@ -429,16 +448,24 @@ export const PublishSurface = ({
               <div className="detail-list__item">
                 <strong>版本回写</strong>
                 <span>
-                  这次会把 {publish.versionTag.trim() || suggestNextPublishVersion(shell)} 与导出时间回写到项目配置中，并创建 Harness Lock。
+                  这次会把 {publish.versionTag.trim() || suggestNextPublishVersion(shell)} 与导出时间回写到项目配置中，并创建发布锁定。
                 </span>
               </div>
               <div className="detail-list__item">
                 <strong>时间线切换</strong>
-                <span>确认导出后，当前导出章节进入 timeline 只读边界，后续修复应落在未来章节。</span>
+                <span>确认导出后，当前导出章节进入已发布只读边界，后续修复应落在未来章节。</span>
               </div>
               <div className="detail-list__item">
                 <strong>输出资产</strong>
-                <span>会生成正文包、简介、发布备注、平台反馈与 manifest，不覆盖已有目录。</span>
+                <span>会生成正文包、简介、发布备注、平台反馈与清单文件，不覆盖已有目录。</span>
+              </div>
+              <div className="detail-list__item">
+                <strong>发布风险</strong>
+                <span>
+                  {hasBlockingOpenPlatformRisks
+                    ? `还有 ${blockingOpenPlatformRisks.length} 个高风险或阻断风险需要处理`
+                    : '没有开放的高风险或阻断风险'}
+                </span>
               </div>
               <div className="detail-list__item">
                 <strong>上一个版本</strong>
@@ -446,6 +473,20 @@ export const PublishSurface = ({
               </div>
             </div>
             <div className="stacked-notes">
+              {blockingOpenPlatformRisks.slice(0, 3).map((risk) => (
+                <div key={risk.riskId} className="stacked-note">
+                  <strong>
+                    {platformRiskSeverityLabel[risk.severity]}风险 · {platformRiskPlatformLabel[risk.platform]}
+                  </strong>
+                  <p>{risk.contextReason}。{risk.suggestion}</p>
+                </div>
+              ))}
+              {blockingOpenPlatformRisks.length > 3 ? (
+                <div className="stacked-note">
+                  <strong>还有更多发布风险</strong>
+                  <p>请先在写作页的发布避雷面板逐项标记已处理或作者豁免，再回到这里导出。</p>
+                </div>
+              ) : null}
               {comparisonNotes.map((item) => (
                 <div key={item} className="stacked-note">
                   <p>{item}</p>
@@ -456,7 +497,7 @@ export const PublishSurface = ({
           <div className="hero-actions">
             <button
               className="primary-button"
-              disabled={!preset || !publish.synopsis.trim() || !publish.versionTag.trim() || isExporting}
+              disabled={!preset || !publish.synopsis.trim() || !publish.versionTag.trim() || isExporting || hasBlockingOpenPlatformRisks}
               onClick={() =>
                 preset &&
                 onCreateExportPackage({
@@ -468,7 +509,7 @@ export const PublishSurface = ({
                 })
               }
             >
-              {isExporting ? '正在导出...' : '确认并导出'}
+              {isExporting ? '正在导出...' : hasBlockingOpenPlatformRisks ? '先处理风险再导出' : '确认并导出'}
             </button>
             <button className="ghost-button" onClick={() => publish.onConfirmOpenChange(false)}>
               继续调整参数

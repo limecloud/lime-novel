@@ -14,6 +14,8 @@ import type {
   DiagnosticReportDto,
   GenerateKnowledgeAnswerInputDto,
   GenerateKnowledgeAnswerResultDto,
+  HarnessCommandInputDto,
+  HarnessCommandResultDto,
   ImpactAnalysisDto,
   ImportKnowledgeDocumentInputDto,
   ImportKnowledgeDocumentResultDto,
@@ -80,6 +82,7 @@ export interface ProjectRepositoryPort {
   updateRevisionIssue(input: UpdateRevisionIssueInputDto): Promise<UpdateRevisionIssueResultDto>
   undoRevisionRecord(recordId: string): Promise<UndoRevisionRecordResultDto>
   createExportPackage(input: CreateExportPackageInputDto): Promise<CreateExportPackageResultDto>
+  runHarnessCommand(input: HarnessCommandInputDto): Promise<HarnessCommandResultDto>
 }
 
 export interface AgentRuntimePort {

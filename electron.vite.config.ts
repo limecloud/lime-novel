@@ -1,8 +1,19 @@
-import { resolve } from 'node:path'
+import { copyFileSync, mkdirSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
 const rendererRoot = resolve('apps/desktop/src/renderer')
+const appServerBackendSource = resolve('apps/desktop/src/main/app-server/lime-novel-agent-backend.mjs')
+const appServerBackendOutput = resolve('out/main/app-server/lime-novel-agent-backend.mjs')
+
+const copyAppServerBackendPlugin = () => ({
+  name: 'copy-lime-app-server-backend',
+  closeBundle: () => {
+    mkdirSync(dirname(appServerBackendOutput), { recursive: true })
+    copyFileSync(appServerBackendSource, appServerBackendOutput)
+  }
+})
 
 const alias = {
   '@lime-novel/shared-kernel': resolve('packages/shared-kernel/src'),
@@ -15,7 +26,7 @@ const alias = {
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin(), copyAppServerBackendPlugin()],
     resolve: {
       alias
     },

@@ -8,11 +8,19 @@ let mainWindow: BrowserWindow | null = null
 let unsubscribeRuntime: (() => void) | null = null
 
 const resolveAppIconPath = (): string | undefined => {
-  const candidates = [
-    join(process.resourcesPath, 'logo-lime.png'),
-    resolve(process.cwd(), 'logo-lime.png'),
-    resolve(process.cwd(), 'apps/desktop/src/renderer/public/logo-lime.png')
+  const appPath = app.getAppPath()
+  const assetDirectories = [
+    process.resourcesPath,
+    join(__dirname, '../renderer'),
+    resolve(appPath, 'out/renderer'),
+    resolve(appPath, 'apps/desktop/src/renderer/public'),
+    resolve(process.cwd(), 'apps/desktop/src/renderer/public'),
+    process.cwd()
   ]
+  const candidates = assetDirectories.flatMap((directory) => [
+    resolve(directory, 'logo-lime.png'),
+    resolve(directory, 'logo-lime-192.png')
+  ])
 
   return candidates.find((path) => existsSync(path))
 }

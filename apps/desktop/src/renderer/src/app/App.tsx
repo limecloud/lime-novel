@@ -7,7 +7,9 @@ import type {
   AgentRuntimeSettingsStateDto,
   GenerateKnowledgeAnswerInputDto,
   GenerateKnowledgeAnswerResultDto,
-  ImportKnowledgeDocumentResultDto
+  HarnessCommandInputDto,
+  ImportKnowledgeDocumentResultDto,
+  StartTaskInputDto
 } from '@lime-novel/application'
 import type { FeatureToolId, NovelSurfaceId } from '@lime-novel/domain-novel'
 import { desktopApi } from '../lib/desktop-api'
@@ -31,7 +33,132 @@ const runtimeProviderLabel: Record<AgentRuntimeSettingsStateDto['resolvedProvide
   'openai-compatible': 'OpenAI Compatible'
 }
 
+const resolveRuntimeLabel = (state: AgentRuntimeSettingsStateDto): string =>
+  state.appServer?.mode === 'external' ? 'Lime App Server external backend' : runtimeProviderLabel[state.resolvedProvider]
+
 const terminalAgentTaskStatuses = new Set<AgentTaskDto['status']>(['completed', 'failed', 'waiting_approval'])
+
+const harnessCommandStatusLabel: Record<HarnessCommandInputDto['command'], string> = {
+  'sync-story-state': '故事状态同步',
+  'update-character-line': '人物线更新',
+  'check-foreshadowing': '伏笔线检查',
+  'analyze-revision-impact': '改动影响检查',
+  'check-platform-risk': '发布避雷检查',
+  'import-reader-feedback': '读者反馈导入',
+  'toggle-skill': '能力包切换',
+  'update-platform-risk': '发布风险确认',
+  'undo-change-set': '变更包撤回',
+  'undo-derived-state': '派生状态撤回'
+}
+
+const writingAgentHarnessCommands = new Set<HarnessCommandInputDto['command']>([
+  'sync-story-state',
+  'update-character-line',
+  'check-foreshadowing',
+  'analyze-revision-impact',
+  'check-platform-risk',
+  'import-reader-feedback'
+])
+
+const localCompatHarnessCommands = new Set<HarnessCommandInputDto['command']>([
+  'toggle-skill',
+  'update-platform-risk',
+  'undo-change-set',
+  'undo-derived-state'
+])
+
+const buildIntent = (lines: Array<string | undefined>): string =>
+  lines.filter((line): line is string => Boolean(line?.trim())).join('\n')
+
+const buildLiveHarnessRequirement = (command: HarnessCommandInputDto['command']): string =>
+  buildIntent([
+    `来源命令：${command}。`,
+    '必须通过真实 Lime App Server / AI Agent 运行服务执行，不允许使用本地规则、mock、静态样例或旧 harness 结果替代。',
+    '需要先读取工作区快照；涉及章节时读取当前章正文；涉及跨章节、人物线、伏笔线、读者反馈或发布规则时使用搜索和 Novel Harness 工具。',
+    '需要落结构化产物时先调用对应工具保存 report、impact、intent plan、feedback 或 timeline iteration，最后必须调用 submit_task_result。'
+  ])
+
+const buildWritingAgentIntent = (input: HarnessCommandInputDto): string => {
+  if (input.command === 'sync-story-state') {
+    return buildIntent([
+      buildLiveHarnessRequirement(input.command),
+      input.chapterId ? `目标章节：${input.chapterId}。` : '目标范围：项目/全书故事状态。',
+      input.triggerEventId ? `触发事件：${input.triggerEventId}。` : undefined,
+      `作者意图：${input.intent ?? '同步当前故事状态，整理人物线、伏笔线、平台风险和下一步动作。'}`,
+      '输出要求：生成可审阅的故事状态同步结果；如果需要改动正文或派生状态，必须以待确认结果呈现，不要直接静默落地。'
+    ])
+  }
+
+  if (input.command === 'update-character-line') {
+    return buildIntent([
+      buildLiveHarnessRequirement(input.command),
+      input.chapterId ? `目标章节：${input.chapterId}。` : undefined,
+      `作者意图：${input.intent ?? '根据当前章同步人物线。'}`,
+      '输出要求：读取正文、场景目标、已有角色状态和设定卡，提炼人物目标、关系压力、状态变化和证据；需要写回时必须生成待确认产物。'
+    ])
+  }
+
+  if (input.command === 'check-foreshadowing') {
+    return buildIntent([
+      buildLiveHarnessRequirement(input.command),
+      input.chapterId ? `目标章节：${input.chapterId}。` : undefined,
+      `作者意图：${input.intent ?? '检查当前章伏笔线。'}`,
+      '输出要求：检查埋下、加深、误导、接近回收和逾期伏笔，给出证据、风险等级和下一步动作。'
+    ])
+  }
+
+  if (input.command === 'analyze-revision-impact') {
+    return buildIntent([
+      buildLiveHarnessRequirement(input.command),
+      input.chapterId ? `目标章节：${input.chapterId}。` : undefined,
+      `作者意图：${input.intent ?? '分析当前改动会牵动哪些人物线、伏笔线、后文反转和读者体验。'}`,
+      '输出要求：必须生成冲击波分析或诊断结果，列出受影响对象、风险、建议和是否需要作者确认。'
+    ])
+  }
+
+  if (input.command === 'check-platform-risk') {
+    return buildIntent([
+      buildLiveHarnessRequirement(input.command),
+      input.chapterId ? `目标章节：${input.chapterId}。` : undefined,
+      input.platform ? `目标平台：${input.platform}。` : '目标平台：general。',
+      `作者意图：${input.intent ?? '检查当前内容的发布避雷风险。'}`,
+      '输出要求：按平台规则检查敏感表达、节奏、发布阻断和替代表达；只记录风险时不要生成正文 patch。'
+    ])
+  }
+
+  if (input.command === 'import-reader-feedback') {
+    return buildIntent([
+      buildLiveHarnessRequirement(input.command),
+      `反馈来源：${input.source ?? '未标注来源'}。`,
+      `读者反馈：${input.comments}`,
+      '输出要求：映射到章节、人物、节奏、设定、伏笔、期待或发布风险，生成证据映射和待确认动作。'
+    ])
+  }
+
+  return buildLiveHarnessRequirement(input.command)
+}
+
+const buildWritingAgentTaskInput = (
+  input: HarnessCommandInputDto,
+  fallbackChapterId?: string
+): StartTaskInputDto => {
+  const chapterId = 'chapterId' in input ? input.chapterId ?? fallbackChapterId : fallbackChapterId
+
+  return {
+    surface: input.command === 'import-reader-feedback' ? 'home' : 'writing',
+    chapterId,
+    intent: buildWritingAgentIntent(input),
+    runtimeOptions: {
+      metadata: {
+        requiresLive: true,
+        sourceCommand: input.command,
+        command: {
+          kind: `harness.${input.command}`
+        }
+      }
+    }
+  }
+}
 
 export const App = () => {
   const [activeSurface, setActiveSurface] = useState<NovelSurfaceId>('home')
@@ -55,6 +182,27 @@ export const App = () => {
   })
 
   const activeWorkspacePath = shellQuery.data?.workspacePath ?? ''
+  const agentRuntimeState = agentSettingsQuery.data
+  const isLiveAgentReady = agentRuntimeState?.mode === 'live'
+
+  const showLiveAgentRequiredStatus = (title = '需要真实 AI 运行服务'): void => {
+    agentFeedStore.addLocalStatus(
+      title,
+      agentRuntimeState?.mode === 'legacy'
+        ? '当前仍是本地规则模式，写作生成、分析、同步和诊断已禁止走 mock/harness 兜底。'
+        : 'AI Agent 设置尚未加载完成，暂时不能提交需要真实模型的任务。',
+      '请在 AI Agent 设置中配置 Anthropic 或 OpenAI Compatible provider、模型和 API Key 后重试。'
+    )
+  }
+
+  const canSubmitLiveAgentTask = (): boolean => {
+    if (isLiveAgentReady) {
+      return true
+    }
+
+    showLiveAgentRequiredStatus()
+    return false
+  }
 
   const syncBackgroundAutomationCount = (): void => {
     setBackgroundAutomationCount(autoMaintenanceKeysRef.current.size)
@@ -119,6 +267,15 @@ export const App = () => {
       return
     }
 
+    if (!isLiveAgentReady) {
+      agentFeedStore.addLocalStatus(
+        '后台整理未启动',
+        '正文已保存；设定代理与修订代理需要真实 AI 运行服务，已阻止本地规则兜底。',
+        '配置 live provider 后可重新保存或手动发起整理。'
+      )
+      return
+    }
+
     const automationKey = `${activeWorkspacePath}::${chapterId}`
 
     if (autoMaintenanceKeysRef.current.has(automationKey)) {
@@ -152,7 +309,13 @@ export const App = () => {
           const result = await desktopApi.agent.startTask({
             surface: task.surface,
             intent: task.intent,
-            chapterId
+            chapterId,
+            runtimeOptions: {
+              metadata: {
+                requiresLive: true,
+                sourceCommand: 'post-save-automation'
+              }
+            }
           })
           batchTaskIds.add(result.task.taskId)
         } catch (error) {
@@ -181,21 +344,16 @@ export const App = () => {
   })
 
   const startTaskMutation = useMutation({
-    mutationFn: (payload: { intent: string; surface: NovelSurfaceId; chapterId?: string }) =>
-      desktopApi.agent.startTask({
-        surface: payload.surface,
-        intent: payload.intent,
-        chapterId: payload.chapterId
-      }),
+    mutationFn: (payload: StartTaskInputDto) => desktopApi.agent.startTask(payload),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
       const runtimeState = agentSettingsQuery.data
 
       if (runtimeState?.mode === 'legacy') {
         agentFeedStore.addLocalStatus(
-          '规则代理任务已提交',
-          `${result.task.title} 正在使用本地规则链路执行。`,
-          '可生成正文提议、设定候选、修订问题和发布检查；接入模型后会升级为 live runtime。'
+          '代理任务已提交',
+          `${result.task.title} 已进入 Lime App Server 主链路。`,
+          '当前未配置 live provider 时任务会失败并提示，不再使用本地规则结果冒充完成。'
         )
         return
       }
@@ -203,7 +361,7 @@ export const App = () => {
       if (runtimeState) {
         agentFeedStore.addLocalStatus(
           '代理任务已提交',
-          `${result.task.title} 已接入 ${runtimeProviderLabel[runtimeState.resolvedProvider]}，正在后台执行。`,
+          `${result.task.title} 已接入 ${resolveRuntimeLabel(runtimeState)}，正在后台执行。`,
           `${runtimeState.resolvedModel} · ${result.task.summary}`
         )
         return
@@ -227,9 +385,9 @@ export const App = () => {
       agentFeedStore.addLocalStatus(
         'AI Agent 设置已保存',
         result.mode === 'legacy'
-          ? '已切回本地规则模式，新发起的任务会继续走规则型收口。'
-          : `已切换到 ${runtimeProviderLabel[result.resolvedProvider]}，新发起的任务会使用 ${result.resolvedModel}。`,
-        result.mode === 'legacy' ? '无需模型 API Key' : `${result.resolvedBaseUrl} · 新任务立即生效`
+          ? '尚未配置 Lime App Server external backend；写作生成、分析、同步和诊断不会走规则型兜底。'
+          : `已接入 ${resolveRuntimeLabel(result)}，新发起的任务会使用 ${result.resolvedModel}。`,
+        result.mode === 'legacy' ? '需要真实 AI 运行服务的任务会被阻止' : `${result.resolvedBaseUrl} · 新任务立即生效`
       )
     },
     onError: (error) => {
@@ -259,6 +417,55 @@ export const App = () => {
       )
     }
   })
+
+  const runHarnessCommandMutation = useMutation({
+    mutationFn: (input: HarnessCommandInputDto) => desktopApi.harness.runCommand(input),
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
+      const relatedRefs = [
+        result.syncRunId ? `同步 ${result.syncRunId}` : undefined,
+        result.changeSetId ? `变更包 ${result.changeSetId}` : undefined,
+        result.protectionPointId ? `保护点 ${result.protectionPointId}` : undefined,
+        result.contextBundleId ? `上下文 ${result.contextBundleId}` : undefined
+      ].filter(Boolean)
+
+      agentFeedStore.addLocalStatus(
+        `${harnessCommandStatusLabel[result.command]}已完成`,
+        result.summary,
+        relatedRefs.length > 0 ? relatedRefs.join(' · ') : `${result.affectedRefs.length} 个故事对象已更新`
+      )
+    },
+    onError: (error) => {
+      agentFeedStore.addLocalStatus(
+        '故事指令执行失败',
+        error instanceof Error ? error.message : '当前故事指令暂时没有执行成功。',
+        '请稍后重试'
+      )
+    }
+  })
+
+  const runWritingAgentCommand = (input: HarnessCommandInputDto): void => {
+    if (writingAgentHarnessCommands.has(input.command)) {
+      if (!canSubmitLiveAgentTask()) {
+        return
+      }
+
+      const taskInput = buildWritingAgentTaskInput(input, activeChapterId ?? undefined)
+      startTaskMutation.mutate(taskInput)
+      return
+    }
+
+    if (localCompatHarnessCommands.has(input.command)) {
+      runHarnessCommandMutation.mutate(input)
+      return
+    }
+
+    agentFeedStore.addLocalStatus(
+      '故事指令未执行',
+      `${input.command} 还没有被归类到 live agent 或本地兼容路径。`,
+      '请先完成命令治理分类。'
+    )
+  }
 
   const updateContextMutation = useMutation({
     mutationFn: (payload: { surface: NovelSurfaceId; featureTool?: FeatureToolId; chapterId?: string }) =>
@@ -500,10 +707,25 @@ export const App = () => {
       void queryClient.invalidateQueries({ queryKey: ['workspace-shell'] })
       agentFeedStore.addLocalStatus('导出包已生成', result.summary, `${result.versionTag} · ${result.outputDir}`)
 
+      if (!isLiveAgentReady) {
+        agentFeedStore.addLocalStatus(
+          '发布复核未自动启动',
+          '发布代理需要真实 AI 运行服务，已阻止本地规则兜底。',
+          result.versionTag
+        )
+        return
+      }
+
       try {
         await desktopApi.agent.startTask({
           surface: 'publish',
-          intent: '请复核这次导出结果并同步平台反馈与最终确认建议。'
+          intent: '请复核这次导出结果并同步平台反馈与最终确认建议。',
+          runtimeOptions: {
+            metadata: {
+              requiresLive: true,
+              sourceCommand: 'publish-export-review'
+            }
+          }
         })
       } catch (error) {
         agentFeedStore.addLocalStatus(
@@ -615,6 +837,8 @@ export const App = () => {
     }
   }, [activeFeatureTool, activeSurface, feedState])
 
+  const isAgentCommandPending = runHarnessCommandMutation.isPending || startTaskMutation.isPending
+
   const workspaceActivityLabel = useMemo(() => {
     if (openProjectMutation.isPending) {
       return '正在切换项目'
@@ -672,6 +896,14 @@ export const App = () => {
       return '正在生成知识问答'
     }
 
+    if (startTaskMutation.isPending) {
+      return '正在提交 AI Agent 任务'
+    }
+
+    if (runHarnessCommandMutation.isPending) {
+      return '正在更新本地故事状态'
+    }
+
     if (chapterQuery.isFetching && activeChapterId) {
       return '正在加载章节'
     }
@@ -691,7 +923,9 @@ export const App = () => {
     importKnowledgeDocumentMutation.isPending,
     openProjectMutation.isPending,
     rejectProposalMutation.isPending,
+    runHarnessCommandMutation.isPending,
     saveChapterMutation.isPending,
+    startTaskMutation.isPending,
     undoRevisionRecordMutation.isPending,
     updateRevisionIssueMutation.isPending
   ])
@@ -750,6 +984,7 @@ export const App = () => {
       isApplyingAnalysisStrategy={applyProjectStrategyProposalMutation.isPending}
       isCreatingExportPackage={createExportPackageMutation.isPending}
       isGeneratingKnowledgeAnswer={generateKnowledgeAnswerMutation.isPending}
+      isRunningHarnessCommand={isAgentCommandPending}
       agentSettingsState={agentSettingsQuery.data}
       agentSettingsError={agentSettingsQuery.error instanceof Error ? agentSettingsQuery.error.message : undefined}
       isAgentSettingsLoading={agentSettingsQuery.isLoading}
@@ -807,6 +1042,10 @@ export const App = () => {
         })
       }}
       onStartTask={(intent, surface) => {
+        if (!canSubmitLiveAgentTask()) {
+          return
+        }
+
         const requestedSurface = surface ?? activeSurface
         const requestedFeatureTool =
           requestedSurface === 'feature-center'
@@ -834,7 +1073,13 @@ export const App = () => {
         startTaskMutation.mutate({
           intent,
           surface: runtimeSurface,
-          chapterId: activeChapterId ?? undefined
+          chapterId: activeChapterId ?? undefined,
+          runtimeOptions: {
+            metadata: {
+              requiresLive: true,
+              sourceCommand: 'agent.startTask'
+            }
+          }
         })
       }}
       onApplyProposal={(proposalId) => {
@@ -873,6 +1118,9 @@ export const App = () => {
       }}
       onTestAgentSettings={(input) => {
         testAgentSettingsMutation.mutate(input)
+      }}
+      onRunHarnessCommand={(input) => {
+        runWritingAgentCommand(input)
       }}
     />
   )

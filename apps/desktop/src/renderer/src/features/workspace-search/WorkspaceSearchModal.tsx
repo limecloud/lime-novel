@@ -9,7 +9,9 @@ const searchItemKindLabel: Record<WorkspaceSearchItemDto['kind'], string> = {
   'revision-issue': '修订问题',
   'export-preset': '导出预设',
   'knowledge-document': '知识页',
-  'knowledge-output': '知识产物'
+  'knowledge-output': '知识产物',
+  'story-state': '故事状态',
+  'platform-risk': '发布风险'
 }
 
 type WorkspaceSearchModalProps = {

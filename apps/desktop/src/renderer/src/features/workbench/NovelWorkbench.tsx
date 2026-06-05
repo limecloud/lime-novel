@@ -14,6 +14,7 @@ import type {
   CreateProjectInputDto,
   GenerateKnowledgeAnswerInputDto,
   GenerateKnowledgeAnswerResultDto,
+  HarnessCommandInputDto,
   QuickActionDto,
   WorkspaceSearchItemDto,
   WorkspaceShellDto
@@ -74,6 +75,7 @@ type NovelWorkbenchProps = {
   isApplyingAnalysisStrategy: boolean
   isCreatingExportPackage: boolean
   isGeneratingKnowledgeAnswer: boolean
+  isRunningHarnessCommand: boolean
   agentSettingsState?: AgentRuntimeSettingsStateDto
   agentSettingsError?: string
   isAgentSettingsLoading: boolean
@@ -102,6 +104,7 @@ type NovelWorkbenchProps = {
   onImportKnowledgeDocument: () => void
   onSaveAgentSettings: (input: AgentRuntimeSettingsDto) => void
   onTestAgentSettings: (input: AgentRuntimeSettingsDto) => void
+  onRunHarnessCommand: (input: HarnessCommandInputDto) => void
 }
 
 type CreateProjectTemplateId = CreateProjectInputDto['template']
@@ -152,6 +155,13 @@ const sceneStatusLabel: Record<string, string> = {
   revised: '已修订'
 }
 
+const platformRiskSeverityLabel: Record<WorkspaceShellDto['platformRisks'][number]['severity'], string> = {
+  low: '低',
+  medium: '中',
+  high: '高',
+  blocking: '阻断'
+}
+
 const buildDefaultCreateProjectForm = (): CreateProjectFormState => ({
   title: '',
   genre: '悬疑 / 都市奇幻',
@@ -192,6 +202,16 @@ const runtimeProviderLabel: Record<AgentRuntimeSettingsStateDto['resolvedProvide
   legacy: '本地规则模式',
   anthropic: 'Claude / Anthropic',
   'openai-compatible': 'OpenAI Compatible'
+}
+
+const resolveRuntimeStatusLabel = (state?: AgentRuntimeSettingsStateDto): string => {
+  if (!state) {
+    return '加载中'
+  }
+
+  return state.appServer?.mode === 'external'
+    ? 'Lime App Server'
+    : runtimeProviderLabel[state.resolvedProvider]
 }
 
 const runtimeTestProviderLabel: Record<AgentRuntimeConnectionTestResultDto['provider'], string> = {
@@ -341,6 +361,7 @@ const agentSidebarModeDefinitions: Array<{
 ]
 
 type WritingInspectorPane = 'state' | 'changes' | 'risk' | 'clock'
+type WritingPlatformId = WorkspaceShellDto['platformRisks'][number]['platform']
 
 const writingInspectorPaneDefinitions: Array<{
   id: WritingInspectorPane
@@ -368,6 +389,117 @@ const writingInspectorPaneDefinitions: Array<{
     description: '查看最近保护点和可撤回范围。'
   }
 ]
+
+const writingPlatformDefinitions: Array<{
+  id: WritingPlatformId
+  label: string
+  ruleLabel: string
+}> = [
+  {
+    id: 'fanqie',
+    label: '番茄',
+    ruleLabel: '番茄发布规则'
+  },
+  {
+    id: 'qidian',
+    label: '起点',
+    ruleLabel: '起点发布规则'
+  },
+  {
+    id: 'general',
+    label: '自定义',
+    ruleLabel: '目标平台规则'
+  }
+]
+
+const writingPlatformLabel: Record<WritingPlatformId, string> = {
+  fanqie: '番茄',
+  qidian: '起点',
+  general: '自定义'
+}
+
+const writingPlatformRuleLabel: Record<WritingPlatformId, string> = {
+  fanqie: '番茄发布规则',
+  qidian: '起点发布规则',
+  general: '目标平台规则'
+}
+
+const formatShortClock = (value?: string): string => {
+  if (!value) {
+    return '当前'
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+}
+
+const resolveChapterMaterialNote = (
+  chapter: ChapterListItemDto,
+  currentChapterId: string | undefined,
+  renderedChapterId: string | undefined
+): string => {
+  if (chapter.chapterId === currentChapterId) {
+    return '当前助手正在读取'
+  }
+
+  if (chapter.chapterId === renderedChapterId) {
+    return '正在渲染'
+  }
+
+  if (chapter.status === 'published') {
+    return '已纳入前文'
+  }
+
+  if (chapter.status === 'idea') {
+    return '可能受本次改动影响'
+  }
+
+  return chapter.summary || '章节材料'
+}
+
+const resolveWritingPreviewParagraphs = (content?: string): string[] =>
+  (content ?? '')
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter((block) => Boolean(block) && !block.startsWith('# '))
+    .slice(0, 6)
+
+const resolveWritingFocusKeyword = (content: string, chapterTitle: string, selectedSceneTitle?: string): string | undefined => {
+  const candidates = [selectedSceneTitle, chapterTitle, ...chapterTitle.split(/[·\s:：,，。-]+/)]
+    .filter((item): item is string => Boolean(item && item.trim().length >= 2))
+    .map((item) => item.trim())
+
+  return candidates.find((item) => content.includes(item))
+}
+
+const renderParagraphWithMark = (paragraph: string, keyword?: string) => {
+  if (!keyword) {
+    return paragraph
+  }
+
+  const index = paragraph.indexOf(keyword)
+
+  if (index < 0) {
+    return paragraph
+  }
+
+  return (
+    <>
+      {paragraph.slice(0, index)}
+      <mark>{keyword}</mark>
+      {paragraph.slice(index + keyword.length)}
+    </>
+  )
+}
 
 const trimAgentRuntimeSettings = (settings: AgentRuntimeSettingsDto): AgentRuntimeSettingsDto => ({
   provider: settings.provider,
@@ -932,7 +1064,7 @@ const SettingsModal = ({
               <span className="eyebrow">AI Agent 引擎</span>
               <h3>真实模型接入</h3>
             </div>
-            <span className="status-chip">{agentSettingsState ? runtimeProviderLabel[agentSettingsState.resolvedProvider] : '加载中'}</span>
+            <span className="status-chip">{resolveRuntimeStatusLabel(agentSettingsState)}</span>
           </div>
           <p className="settings-modal__hint">保存后只影响新发起的任务，当前正在运行的代理不会被中断。</p>
 
@@ -951,20 +1083,20 @@ const SettingsModal = ({
               <div className="detail-list detail-list--compact">
                 <div className="detail-list__item">
                   <strong>当前生效模式</strong>
-                  <span>{agentSettingsState?.mode === 'legacy' ? '规则型本地收口' : '实时模型执行'}</span>
+                  <span>{agentSettingsState?.mode === 'legacy' ? '未配置 App Server external backend' : 'Lime App Server external backend'}</span>
                 </div>
                 <div className="detail-list__item">
-                  <strong>当前 Provider</strong>
-                  <span>{agentSettingsState ? runtimeProviderLabel[agentSettingsState.resolvedProvider] : '未设置'}</span>
+                  <strong>App Server</strong>
+                  <span>{agentSettingsState?.appServer?.mode === 'external' ? 'external backend' : '未配置'}</span>
                 </div>
                 <div className="detail-list__item">
-                  <strong>当前模型</strong>
+                  <strong>运行目标</strong>
                   <span>{agentSettingsState?.resolvedModel ?? '未设置'}</span>
                 </div>
                 <div className="detail-list__item">
                   <strong>当前入口</strong>
                   <span className="settings-modal__path" title={agentSettingsState?.resolvedBaseUrl}>
-                    {agentSettingsState?.resolvedBaseUrl || '本地规则模式无需网关地址'}
+                    {agentSettingsState?.resolvedBaseUrl || '需要 LIME_APP_SERVER_BIN 与真实模型配置，或 LIME_APP_SERVER_BACKEND_COMMAND'}
                   </span>
                 </div>
               </div>
@@ -1184,7 +1316,9 @@ const HomeSurface = ({
   onSurfaceChange,
   onCreateProjectRequest,
   onSelectChapter,
-  onStartTask
+  onStartTask,
+  onRunHarnessCommand,
+  isRunningHarnessCommand
 }: {
   shell: WorkspaceShellDto
   activeChapter?: ChapterListItemDto
@@ -1193,10 +1327,15 @@ const HomeSurface = ({
   onCreateProjectRequest: () => void
   onSelectChapter: (chapterId: string) => void
   onStartTask: (intent: string) => void
+  onRunHarnessCommand: (input: HarnessCommandInputDto) => void
+  isRunningHarnessCommand: boolean
 }) => {
+  const [readerFeedbackSource, setReaderFeedbackSource] = useState('')
+  const [readerFeedbackComment, setReaderFeedbackComment] = useState('')
   const totalWords = shell.chapterTree.reduce((sum, chapter) => sum + chapter.wordCount, 0)
   const progress = Math.min(totalWords / 200000, 1)
   const spotlightItems = feedState.feed.slice(0, 3)
+  const storyState = shell.storyState
   const harnessArtifactCount =
     shell.diagnosticReports.length +
     shell.impactAnalyses.length +
@@ -1206,6 +1345,22 @@ const HomeSurface = ({
   const latestDiagnosticReport = shell.diagnosticReports[0]
   const latestImpactAnalysis = shell.impactAnalyses[0]
   const latestTimelineIteration = shell.timelineIterations[0]
+  const canImportReaderFeedback = readerFeedbackComment.trim().length > 0 && !isRunningHarnessCommand
+  const handleImportReaderFeedback = (): void => {
+    const comments = readerFeedbackComment.trim()
+
+    if (!comments) {
+      return
+    }
+
+    const source = readerFeedbackSource.trim()
+    onRunHarnessCommand({
+      command: 'import-reader-feedback',
+      comments,
+      source: source || undefined
+    })
+    setReaderFeedbackComment('')
+  }
 
   return (
     <div className="surface-stack">
@@ -1220,7 +1375,7 @@ const HomeSurface = ({
             <span>拆书样本 {shell.analysisSamples.length}</span>
             <span>候选设定卡 {shell.canonCandidates.length}</span>
             <span>修订问题 {shell.revisionIssues.length}</span>
-            <span>Harness 产物 {harnessArtifactCount}</span>
+            <span>故事产物 {harnessArtifactCount}</span>
             <span>导出预设 {shell.exportPresets.length}</span>
           </div>
           <div className="progress-track">
@@ -1232,9 +1387,22 @@ const HomeSurface = ({
             </button>
             <button
               className="ghost-button"
+              disabled={isRunningHarnessCommand}
+              onClick={() =>
+                onRunHarnessCommand({
+                  command: 'sync-story-state',
+                  chapterId: activeChapter?.chapterId,
+                  intent: '请同步当前故事状态，整理人物线、伏笔线、发布风险和下一章动作。'
+                })
+              }
+            >
+              {isRunningHarnessCommand ? '正在整理故事状态' : '整理故事状态'}
+            </button>
+            <button
+              className="ghost-button"
               onClick={() => onStartTask('请帮我恢复当前项目现场，并给出下一步最优先动作。')}
             >
-              恢复现场
+              问 Agent 下一步
             </button>
             <button className="ghost-button" onClick={onCreateProjectRequest}>
               新建项目
@@ -1293,9 +1461,34 @@ const HomeSurface = ({
 
       <section className="surface-grid surface-grid--three">
         <article className="surface-card">
+          <span className="eyebrow">故事状态</span>
+          <h3>{storyState.currentProgress}</h3>
+          <p>{storyState.mainPressure}</p>
+        </article>
+        <article className="surface-card">
+          <span className="eyebrow">下一章动作</span>
+          <h3>{storyState.nextChapterMoves[0] ?? '等待同步'}</h3>
+          <p>
+            {storyState.nextChapterMoves.slice(1, 3).join(' / ') ||
+              `人物线 ${shell.characterStates.length} 条，伏笔线 ${shell.foreshadowingStates.length} 条。`}
+          </p>
+        </article>
+        <article className="surface-card">
+          <span className="eyebrow">保护与变更</span>
+          <h3>{shell.protectionPoints.length} 个保护点</h3>
+          <p>
+            {shell.changeSets.length > 0
+              ? `${shell.changeSets.filter((item) => item.status === 'pending').length} 个变更包待确认 / ${shell.storySyncRuns.length} 次故事同步`
+              : '整理故事状态前会先保存可回到的保护点。'}
+          </p>
+        </article>
+      </section>
+
+      <section className="surface-grid surface-grid--three">
+        <article className="surface-card">
           <span className="eyebrow">小说驾驭引擎</span>
-          <h3>{shell.project.lifecycleMode === 'timeline' ? 'Timeline 时间线模式' : 'Sandbox 沙盘模式'}</h3>
-          <p>{shell.harnessProfile.constraints[0] ?? 'Harness 负责先诊断、模拟和出方案，不直接覆盖正文。'}</p>
+          <h3>{shell.project.lifecycleMode === 'timeline' ? '已发布时间线模式' : '试写沙盘模式'}</h3>
+          <p>{shell.harnessProfile.constraints[0] ?? '先诊断、模拟和出方案，不直接覆盖正文。'}</p>
         </article>
         <article className="surface-card">
           <span className="eyebrow">最新体检 / 影响</span>
@@ -1314,6 +1507,29 @@ const HomeSurface = ({
               ? `最近计划：${latestTimelineIteration.strategy}，承载 ${latestTimelineIteration.targetFutureRefs.join(' / ')}`
               : '读者反馈会先作为证据映射，再决定是否进入未来章节补强。'}
           </p>
+          <label className="field-stack">
+            <span>反馈来源</span>
+            <input
+              value={readerFeedbackSource}
+              onChange={(event) => setReaderFeedbackSource(event.target.value)}
+              placeholder="例如：番茄书评 / 读者群 / 内测读者"
+              disabled={isRunningHarnessCommand}
+            />
+          </label>
+          <label className="field-stack">
+            <span>读者评论</span>
+            <textarea
+              value={readerFeedbackComment}
+              onChange={(event) => setReaderFeedbackComment(event.target.value)}
+              placeholder="粘贴读者反馈，系统会映射到人物期待、节奏风险或未来章节补强。"
+              disabled={isRunningHarnessCommand}
+            />
+          </label>
+          <div className="hero-actions">
+            <button className="ghost-button" disabled={!canImportReaderFeedback} onClick={handleImportReaderFeedback}>
+              {isRunningHarnessCommand ? '正在导入反馈' : '导入读者反馈'}
+            </button>
+          </div>
         </article>
       </section>
 
@@ -1338,11 +1554,14 @@ const WritingSurface = ({
   feedState,
   activityLabel,
   runtimeLabel,
+  targetPlatform,
   onSelectChapter,
   onStartTask,
+  onRunHarnessCommand,
   onApplyProposal,
   onRejectProposal,
-  onSaveChapter
+  onSaveChapter,
+  isRunningHarnessCommand
 }: {
   shell: WorkspaceShellDto
   chapterDocument?: ChapterDocumentDto
@@ -1351,11 +1570,14 @@ const WritingSurface = ({
   feedState: AgentFeedSnapshot
   activityLabel: string
   runtimeLabel: string
+  targetPlatform: WritingPlatformId
   onSelectChapter: (chapterId: string) => void
   onStartTask: (intent: string) => void
+  onRunHarnessCommand: (input: HarnessCommandInputDto) => void
   onApplyProposal: (proposalId: string) => void
   onRejectProposal: (proposalId: string) => void
   onSaveChapter: (chapterId: string, content: string) => void
+  isRunningHarnessCommand: boolean
 }) => {
   const [draftContent, setDraftContent] = useState(chapterDocument?.content ?? '')
   const [intentDraft, setIntentDraft] = useState('帮我检查这一章是否需要提前补强反转依据。')
@@ -1386,8 +1608,14 @@ const WritingSurface = ({
   const previewChapter = renderedChapter ?? shell.chapterTree.find((chapter) => chapter.chapterId === chapterDocument.chapterId)
   const isPreviewingCurrentChapter = previewChapter?.chapterId === chapterDocument.chapterId
   const previewParagraphs = isPreviewingCurrentChapter
-    ? excerptParagraphs(chapterDocument.content)
+    ? resolveWritingPreviewParagraphs(chapterDocument.content)
     : excerptParagraphs(previewChapter?.summary)
+  const previewKeyword = resolveWritingFocusKeyword(
+    previewParagraphs.join('\n'),
+    previewChapter?.title ?? chapterDocument.title,
+    selectedScene?.title
+  )
+  const targetPlatformRule = writingPlatformRuleLabel[targetPlatform]
   const handleSubmitIntent = (): void => {
     const intent = intentDraft.trim()
 
@@ -1405,6 +1633,16 @@ const WritingSurface = ({
 
     onSaveChapter(chapterDocument.chapterId, draftContent)
   }
+  const runChapterHarnessCommand = (input: HarnessCommandInputDto): void => {
+    onRunHarnessCommand(
+      'chapterId' in input && input.chapterId === undefined
+        ? {
+            ...input,
+            chapterId: chapterDocument.chapterId
+          }
+        : input
+    )
+  }
 
   return (
     <div className="agent-writing-stage">
@@ -1412,18 +1650,52 @@ const WritingSurface = ({
         <div className="agent-writing-header__title">
           <h1>{latestTask?.title ?? `${chapterDocument.title} 的 Agent 任务`}</h1>
           <span>
-            Agent 正在围绕《{chapterDocument.title}》读取章节材料、{selectedScene?.title ?? '故事资产'}、人物线、伏笔线、发布规则和启用能力包
+            Agent 正在读取《{chapterDocument.title}》、前后章节、人物线、伏笔线、{targetPlatformRule}和启用能力包
           </span>
         </div>
         <div className="agent-writing-header__actions">
-          <button type="button" className="writing-mini-button" onClick={() => onStartTask('请检查当前章会牵动哪些人物线、伏笔线和后文反转。')}>
+          <button
+            type="button"
+            className="writing-mini-button"
+            disabled={isRunningHarnessCommand}
+            onClick={() =>
+              runChapterHarnessCommand({
+                command: 'analyze-revision-impact',
+                chapterId: chapterDocument.chapterId,
+                intent: '请检查当前章会牵动哪些人物线、伏笔线和后文反转。'
+              })
+            }
+          >
             牵动范围
           </button>
-          <button type="button" className="writing-mini-button" onClick={() => onStartTask('请按目标平台检查这一章发布风险，只给建议，不直接改正文。')}>
+          <button
+            type="button"
+            className="writing-mini-button"
+            disabled={isRunningHarnessCommand}
+            onClick={() =>
+              runChapterHarnessCommand({
+                command: 'check-platform-risk',
+                chapterId: chapterDocument.chapterId,
+                platform: targetPlatform,
+                intent: `请按${targetPlatformRule}检查这一章发布风险，只给建议，不直接改正文。`
+              })
+            }
+          >
             发布避雷
           </button>
-          <button type="button" className="writing-mini-button writing-mini-button--primary" onClick={() => onStartTask('请生成一个待确认变更包，包含牵动范围、改动对照和可撤回范围。')}>
-            {proposalCount > 0 ? `${proposalCount} 项待确认` : '生成变更包'}
+          <button
+            type="button"
+            className="writing-mini-button writing-mini-button--primary"
+            disabled={isRunningHarnessCommand}
+            onClick={() =>
+              runChapterHarnessCommand({
+                command: 'sync-story-state',
+                chapterId: chapterDocument.chapterId,
+                intent: '请同步当前章后的故事状态，并整理可确认的下一步动作。'
+              })
+            }
+          >
+            {isRunningHarnessCommand ? '正在整理' : proposalCount > 0 ? `${proposalCount} 项待确认` : '整理故事状态'}
           </button>
         </div>
       </header>
@@ -1450,12 +1722,12 @@ const WritingSurface = ({
             <p>我会先保护当前状态，再读取相关材料。正文、人物线、伏笔线、发布避雷都会进入同一个试改版本，等待你确认后才落地。</p>
             <div className="agent-writing-capsules">
               <span className="memory-chip">{chapterDocument.title}</span>
-              <span className="memory-chip">渲染：{previewChapter?.title ?? '当前章'}</span>
+              <span className="memory-chip">第 {previewChapter?.order ?? ''} 章预览</span>
               <span className="memory-chip">{selectedScene?.title ?? '故事资产'}</span>
               <span className="memory-chip">人物线</span>
               <span className="memory-chip">伏笔线</span>
-              <span className="memory-chip">发布避雷</span>
-              <span className="memory-chip">能力包</span>
+              <span className="memory-chip memory-chip--warn">{targetPlatformRule}</span>
+              <span className="memory-chip">能力包 {shell.skillCatalog.filter((skill) => skill.enabled).length}</span>
             </div>
             <div className="agent-writing-plan">
               <div><b>1. 读材料</b><span>当前章、章节材料、人物线、伏笔线。</span></div>
@@ -1525,8 +1797,10 @@ const WritingSurface = ({
                 </div>
               ) : (
                 <div className="agent-writing-render-body">
-                  {(previewParagraphs.length > 0 ? previewParagraphs : [chapterDocument.content]).slice(0, 6).map((paragraph) => (
-                    <p key={paragraph}>{paragraph}</p>
+                  {(previewParagraphs.length > 0 ? previewParagraphs : [chapterDocument.content]).slice(0, 6).map((paragraph, index) => (
+                    <p key={`${index}-${paragraph.slice(0, 16)}`}>
+                      {renderParagraphWithMark(paragraph, previewKeyword)}
+                    </p>
                   ))}
                   {!isPreviewingCurrentChapter ? (
                     <p className="agent-writing-render-note">
@@ -1697,7 +1971,9 @@ const WritingStructurePanel = ({
   selectedSceneId,
   onPreviewChapter,
   onSelectScene,
-  onStartTask
+  onStartTask,
+  onRunHarnessCommand,
+  isRunningHarnessCommand
 }: {
   shell: WorkspaceShellDto
   chapterId?: string
@@ -1706,81 +1982,180 @@ const WritingStructurePanel = ({
   onPreviewChapter: (chapterId: string) => void
   onSelectScene: (sceneId: string) => void
   onStartTask: (intent: string) => void
-}) => (
-  <div className="structure-panel__content">
-    <div className="structure-panel__section">
-      <div className="side-head">
-        <h3>新对话</h3>
-        <button className="ghost-button" onClick={() => onStartTask('请新建一个写作意图，并先读取当前小说上下文资产。')}>
-          ＋
-        </button>
-      </div>
-      <button className="panel-list-button panel-list-button--active" onClick={() => onStartTask('请检查当前章伏笔会牵动哪里。')}>
-        <strong>伏笔会牵动哪里</strong>
-        <span>刚刚 · Agent 主线程</span>
-      </button>
-      <button className="panel-list-button" onClick={() => onStartTask('请按目标平台检查当前章发布风险。')}>
-        <strong>当前章发布避雷</strong>
-        <span>12 分 · 只给建议</span>
-      </button>
-      <button className="panel-list-button" onClick={() => onStartTask('请补强人物动机，但先生成变更包。')}>
-        <strong>人物动机补强</strong>
-        <span>1 小时 · 待确认</span>
-      </button>
-    </div>
+  onRunHarnessCommand: (input: HarnessCommandInputDto) => void
+  isRunningHarnessCommand: boolean
+}) => {
+  const enabledSkills = shell.skillCatalog.filter((skill) => skill.enabled)
+  const openPlatformRiskCount = shell.platformRisks.filter((risk) => risk.status === 'open').length
+  const storyAssetLinks = [
+    {
+      title: '人物线',
+      detail: `${shell.characterStates.length} 更新`,
+      intent: '请读取人物线，告诉我当前章最容易牵动哪些角色目标。'
+    },
+    {
+      title: '伏笔线',
+      detail: `${shell.foreshadowingStates.length} 待跟踪`,
+      intent: '请读取伏笔线，判断当前章有哪些线索接近回收。'
+    },
+    {
+      title: '世界设定',
+      detail: `${shell.canonCandidates.length} 张设定卡`,
+      intent: '请读取当前设定卡，检查这一章是否冲突。'
+    },
+    {
+      title: '读者期待',
+      detail: shell.storyState.readerExpectations.length > 0 ? `${shell.storyState.readerExpectations.length} 条反馈` : '等待反馈',
+      intent: '请结合读者期待，判断当前章的悬念和节奏是否需要调整。'
+    }
+  ]
 
-    <div className="structure-panel__section">
-      <div className="side-head">
-        <h3>章节材料</h3>
-        <small>点击渲染</small>
-      </div>
-      {shell.chapterTree.map((chapter) => (
+  return (
+    <div className="structure-panel__content">
+      <div className="structure-panel__section">
+        <div className="side-head">
+          <h3>新对话</h3>
+          <button
+            type="button"
+            className="writing-icon-button"
+            onClick={() => onStartTask('请新建一个写作意图，并先读取当前小说上下文资产。')}
+            aria-label="新建写作意图"
+            title="新建写作意图"
+          >
+            ＋
+          </button>
+        </div>
         <button
-          key={chapter.chapterId}
-          className={chapter.chapterId === renderedChapterId ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
-          onClick={() => onPreviewChapter(chapter.chapterId)}
+          type="button"
+          className="panel-list-button panel-list-button--conversation panel-list-button--active"
+          onClick={() => onStartTask('请检查当前章伏笔会牵动哪里。')}
         >
-          <strong>{`第 ${chapter.order} 章 ${chapter.title}`}</strong>
-          <span>
-            {chapterStatusLabel[chapter.status]} · {formatCount(chapter.wordCount)} 字
-            {chapter.chapterId === chapterId ? ' · 当前写作章' : ''}
-            {chapter.chapterId === renderedChapterId && chapter.chapterId !== chapterId ? ' · 正在渲染' : ''}
-          </span>
+          <strong>伏笔会牵动哪里</strong>
+          <span>刚刚</span>
         </button>
-      ))}
-    </div>
-
-    <div className="structure-panel__section">
-      <div className="side-head">
-        <h3>故事资产</h3>
-        <small>Agent 可读取</small>
-      </div>
-      {shell.sceneList.map((scene) => (
         <button
-          key={scene.sceneId}
-          className={scene.sceneId === selectedSceneId ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
-          onClick={() => onSelectScene(scene.sceneId)}
+          type="button"
+          className="panel-list-button panel-list-button--conversation"
+          onClick={() => onStartTask('请按目标平台检查当前章发布风险。')}
         >
-          <strong>{`${scene.order}. ${scene.title}`}</strong>
-          <span>{sceneStatusLabel[scene.status]} · {scene.goal}</span>
+          <strong>当前章发布避雷</strong>
+          <span>12 分</span>
         </button>
-      ))}
-    </div>
+        <button
+          type="button"
+          className="panel-list-button panel-list-button--conversation"
+          onClick={() => onStartTask('请补强人物动机，但先生成变更包。')}
+        >
+          <strong>人物动机补强</strong>
+          <span>1 小时</span>
+        </button>
+        <button
+          type="button"
+          className="panel-list-button panel-list-button--conversation"
+          onClick={() => onStartTask('请试改下一章章纲，只生成变更包让我确认。')}
+        >
+          <strong>下一章章纲试改</strong>
+          <span>昨天</span>
+        </button>
+      </div>
 
-    <div className="structure-panel__section">
-      <div className="side-head">
-        <h3>能力包</h3>
-        <small>项目启用</small>
+      <div className="structure-panel__section">
+        <div className="side-head">
+          <h3>章节材料</h3>
+          <small>点击渲染</small>
+        </div>
+        {shell.chapterTree.map((chapter) => (
+          <button
+            key={chapter.chapterId}
+            type="button"
+            className={[
+              'panel-list-button',
+              'panel-list-button--chapter',
+              chapter.chapterId === renderedChapterId ? 'panel-list-button--active' : ''
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() => onPreviewChapter(chapter.chapterId)}
+          >
+            <strong>{`第 ${chapter.order} 章 ${chapter.title}`}</strong>
+            <span>{chapterStatusLabel[chapter.status]}</span>
+            <em>
+              {formatCount(chapter.wordCount)} 字 · {resolveChapterMaterialNote(chapter, chapterId, renderedChapterId)}
+            </em>
+          </button>
+        ))}
       </div>
-      <div className="agent-writing-capsules">
-        <span className="memory-chip">人物线同步</span>
-        <span className="memory-chip">伏笔线检查</span>
-        <span className="memory-chip">发布避雷</span>
-        <span className="memory-chip">修订检查</span>
+
+      <div className="structure-panel__section">
+        <div className="side-head">
+          <h3>故事资产</h3>
+          <small>Agent 可读取</small>
+        </div>
+        {storyAssetLinks.map((asset) => (
+          <button
+            key={asset.title}
+            type="button"
+            className="panel-list-button panel-list-button--asset"
+            onClick={() => onStartTask(asset.intent)}
+          >
+            <strong>{asset.title}</strong>
+            <span>{asset.detail}</span>
+          </button>
+        ))}
+        {shell.sceneList.slice(0, 3).map((scene) => (
+          <button
+            key={scene.sceneId}
+            type="button"
+            className={scene.sceneId === selectedSceneId ? 'panel-list-button panel-list-button--scene panel-list-button--active' : 'panel-list-button panel-list-button--scene'}
+            onClick={() => onSelectScene(scene.sceneId)}
+          >
+            <strong>{`${scene.order}. ${scene.title}`}</strong>
+            <span>{sceneStatusLabel[scene.status]} · {scene.goal}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="structure-panel__section">
+        <div className="side-head">
+          <h3>能力包</h3>
+          <small>{enabledSkills.length} 个已启用</small>
+        </div>
+        <div className="writing-skill-tags">
+          {shell.skillCatalog.map((skill) => (
+            <button
+              key={skill.skillId}
+              type="button"
+              className={[
+                'writing-skill-tag',
+                skill.enabled ? 'writing-skill-tag--enabled' : '',
+                skill.category === 'compliance' && openPlatformRiskCount > 0 ? 'writing-skill-tag--warn' : ''
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              disabled={isRunningHarnessCommand}
+              onClick={() =>
+                onRunHarnessCommand({
+                  command: 'toggle-skill',
+                  skillId: skill.skillId,
+                  enabled: !skill.enabled
+                })
+              }
+              title={`${skill.description} · ${skill.enabled ? '点击停用' : '点击启用'} · ${skill.version}`}
+            >
+              {skill.title}
+            </button>
+          ))}
+        </div>
+        {shell.skillCatalog.length === 0 ? (
+          <div className="panel-note">
+            <strong>暂无能力包</strong>
+            <span>项目加载能力包后，会在这里显示可启用的检查与同步能力。</span>
+          </div>
+        ) : null}
       </div>
     </div>
-  </div>
-)
+  )
+}
 
 const AgentWritingInspector = ({
   shell,
@@ -1789,12 +2164,15 @@ const AgentWritingInspector = ({
   selectedScene,
   feedState,
   runtimeLabel,
+  targetPlatform,
   activePane,
   onPaneChange,
   onCollapse,
   onStartTask,
+  onRunHarnessCommand,
   onApplyProposal,
-  onRejectProposal
+  onRejectProposal,
+  isRunningHarnessCommand
 }: {
   shell: WorkspaceShellDto
   chapterDocument?: ChapterDocumentDto
@@ -1802,27 +2180,59 @@ const AgentWritingInspector = ({
   selectedScene?: WorkspaceShellDto['sceneList'][number]
   feedState: AgentFeedSnapshot
   runtimeLabel: string
+  targetPlatform: WritingPlatformId
   activePane: WritingInspectorPane
   onPaneChange: (pane: WritingInspectorPane) => void
   onCollapse: () => void
   onStartTask: (intent: string) => void
+  onRunHarnessCommand: (input: HarnessCommandInputDto) => void
   onApplyProposal: (proposalId: string) => void
   onRejectProposal: (proposalId: string) => void
+  isRunningHarnessCommand: boolean
 }) => {
   const latestTask = resolveActiveWritingTask(feedState.tasks)
   const taskFeed = resolveTaskFeed(feedState.feed, latestTask)
   const pendingItems = taskFeed.filter(isPendingProposalItem)
+  const storyState = shell.storyState
+  const latestSyncRun = shell.storySyncRuns[0] ?? storyState.recentSyncRuns[0]
+  const latestProtectionPoint = shell.protectionPoints[0] ?? storyState.protectionPoints[0]
+  const pendingChangeSets = shell.changeSets.filter((changeSet) => changeSet.status === 'pending')
+  const latestChangeSet = pendingChangeSets[0] ?? shell.changeSets[0] ?? storyState.changeSets[0]
+  const currentCharacterStates =
+    storyState.primaryCharacterStates.length > 0 ? storyState.primaryCharacterStates : shell.characterStates
+  const currentForeshadowingStates =
+    storyState.unresolvedForeshadowing.length > 0 ? storyState.unresolvedForeshadowing : shell.foreshadowingStates
+  const openPlatformRisks = shell.platformRisks.filter((risk) => risk.status === 'open')
+  const enabledSkills = shell.skillCatalog.filter((skill) => skill.enabled)
   const latestRecord =
     shell.revisionRecords.find((record) => record.chapterId === chapterDocument?.chapterId) ?? shell.revisionRecords[0]
-  const publishingFinding = shell.diagnosticReports
+  const publishingFinding = storyState.pacingRisks
+    .find((finding) => !chapterDocument || finding.targetRefs.includes(chapterDocument.chapterId)) ??
+    shell.diagnosticReports
     .flatMap((report) => report.findings)
     .find(
       (finding) =>
         (finding.area === 'publishing' || finding.area === 'reader-risk') &&
         (!chapterDocument || finding.targetRefs.includes(chapterDocument.chapterId))
     )
+  const latestPlatformRisk = openPlatformRisks[0] ?? storyState.platformRisks[0]
   const latestPublishFeedback = shell.latestExportComparison?.addedFeedback[0] ?? shell.recentExports[0]?.platformFeedback[0]
-  const publishRiskLabel = publishingFinding ? `${publishingFinding.severity} 风险` : '待检查'
+  const publishRiskLabel = latestPlatformRisk
+    ? `${platformRiskSeverityLabel[latestPlatformRisk.severity]}风险`
+    : publishingFinding
+      ? `${platformRiskSeverityLabel[publishingFinding.severity]}风险`
+      : '待检查'
+  const targetPlatformRule = writingPlatformRuleLabel[targetPlatform]
+  const runInspectorHarnessCommand = (input: HarnessCommandInputDto): void => {
+    onRunHarnessCommand(
+      'chapterId' in input && input.chapterId === undefined
+        ? {
+            ...input,
+            chapterId: chapterDocument?.chapterId
+          }
+        : input
+    )
+  }
 
   return (
     <aside className="agent-writing-inspector">
@@ -1859,17 +2269,37 @@ const AgentWritingInspector = ({
               <div className="agent-writing-context-row"><span>◎</span><b>变更</b><small>{pendingItems.length} 待确认</small></div>
               <div className="agent-writing-context-row"><span>▣</span><b>本地</b><small>{shell.project.lifecycleMode}</small></div>
               <div className="agent-writing-context-row"><span>◇</span><b>当前章</b><small>{chapterDocument?.title ?? '加载中'}</small></div>
-              <div className="agent-writing-context-row"><span>□</span><b>渲染</b><small>{renderedChapter?.title ?? chapterDocument?.title ?? '当前章'}</small></div>
+              <div className="agent-writing-context-row"><span>□</span><b>渲染</b><small>{renderedChapter ? `第 ${renderedChapter.order} 章` : '当前章'}</small></div>
               <div className="agent-writing-context-row"><span>✦</span><b>故事资产</b><small>{selectedScene?.title ?? '未选择'}</small></div>
-              <div className="agent-writing-context-row"><span>☰</span><b>Lime App Server</b><small>{runtimeLabel}</small></div>
+              <div className="agent-writing-context-row"><span>◌</span><b>故事同步</b><small>{latestSyncRun?.status ?? '未运行'}</small></div>
+              <div className="agent-writing-context-row"><span>☰</span><b>AI 运行服务</b><small>{runtimeLabel}</small></div>
+              <div className="agent-writing-context-row"><span>◎</span><b>目标平台</b><small>{writingPlatformLabel[targetPlatform]}</small></div>
             </section>
 
             <section className="agent-writing-panel">
               <h3>当前章态势 <span className="status-chip status-chip--slim">可继续写</span></h3>
-              <p>{chapterDocument?.objective ?? shell.project.premise}</p>
+              <p>{storyState.currentProgress}。{storyState.mainPressure || chapterDocument?.objective || shell.project.premise}</p>
               <div className="agent-writing-capsules">
                 <span className="memory-chip">{selectedScene ? sceneStatusLabel[selectedScene.status] : '故事资产待选'}</span>
-                <span className="memory-chip">反转依据待补强</span>
+                <span className="memory-chip">人物线 {currentCharacterStates.length}</span>
+                <span className="memory-chip">伏笔线 {currentForeshadowingStates.length}</span>
+                <span className="memory-chip">能力包 {enabledSkills.length}</span>
+              </div>
+              <div className="agent-writing-card__actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={isRunningHarnessCommand}
+                  onClick={() =>
+                    runInspectorHarnessCommand({
+                      command: 'sync-story-state',
+                      chapterId: chapterDocument?.chapterId,
+                      intent: '请同步当前故事状态，并给出下一章最该处理的动作。'
+                    })
+                  }
+                >
+                  {isRunningHarnessCommand ? '正在同步' : '同步故事状态'}
+                </button>
               </div>
             </section>
 
@@ -1885,31 +2315,93 @@ const AgentWritingInspector = ({
 
             <section className="agent-writing-panel">
               <h3>人物线</h3>
-              {shell.canonCandidates.slice(0, 2).map((card) => (
-                <div key={card.cardId} className="agent-writing-line-item">
-                  <header><strong>{card.name}</strong><small>{card.visibility}</small></header>
-                  <p>{card.summary}</p>
+              {currentCharacterStates.slice(0, 3).map((state) => (
+                <div key={state.stateId} className="agent-writing-line-item">
+                  <header><strong>{state.name}</strong><small>{Math.round(state.confidence * 100)}%</small></header>
+                  <p>{state.currentGoal}。{state.relationshipPressure}</p>
                 </div>
               ))}
+              {currentCharacterStates.length === 0 ? (
+                <div className="agent-writing-line-item">
+                  <header><strong>等待人物线同步</strong><small>未生成</small></header>
+                  <p>同步后会显示主要角色的目标、处境和关系压力。</p>
+                </div>
+              ) : null}
+              <div className="agent-writing-card__actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isRunningHarnessCommand}
+                  onClick={() =>
+                    runInspectorHarnessCommand({
+                      command: 'update-character-line',
+                      chapterId: chapterDocument?.chapterId,
+                      intent: '请根据当前章更新人物目标、处境和关系压力。'
+                    })
+                  }
+                >
+                  刷新人物线
+                </button>
+              </div>
             </section>
 
             <section className="agent-writing-panel">
               <h3>伏笔线</h3>
               <div className="agent-writing-progress-steps">
                 <span className="is-active">埋下</span>
-                <span className="is-active">加深</span>
-                <span className="is-active">接近回收</span>
-                <span>回收</span>
+                <span className={currentForeshadowingStates.length > 0 ? 'is-active' : ''}>加深</span>
+                <span className={currentForeshadowingStates.some((state) => state.status === 'needs-confirmation' || state.status === 'overdue' || state.status === 'resolved') ? 'is-active' : ''}>
+                  接近回收
+                </span>
+                <span className={currentForeshadowingStates.some((state) => state.status === 'resolved') ? 'is-active' : ''}>回收</span>
               </div>
-              <p>建议先让 Agent 读取后续章纲，再决定是否生成后文补强变更包。</p>
+              {currentForeshadowingStates.slice(0, 3).map((state) => (
+                <div key={state.threadId} className="agent-writing-line-item">
+                  <header><strong>{state.title}</strong><small>{state.status}</small></header>
+                  <p>{state.nextAction}</p>
+                </div>
+              ))}
+              {currentForeshadowingStates.length === 0 ? (
+                <p>建议先读取后续章纲，再决定是否生成后文补强变更包。</p>
+              ) : null}
+              <div className="agent-writing-card__actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={isRunningHarnessCommand}
+                  onClick={() =>
+                    runInspectorHarnessCommand({
+                      command: 'check-foreshadowing',
+                      chapterId: chapterDocument?.chapterId,
+                      intent: '请检查当前章伏笔是否需要加深、误导或准备回收。'
+                    })
+                  }
+                >
+                  检查伏笔线
+                </button>
+              </div>
             </section>
           </>
         ) : null}
 
         {activePane === 'changes' ? (
           <section className="agent-writing-panel">
-            <h3>变更包 <span className="status-chip status-chip--slim">{pendingItems.length > 0 ? '待确认' : '未生成'}</span></h3>
+            <h3>
+              变更包{' '}
+              <span className="status-chip status-chip--slim">
+                {pendingChangeSets.length > 0 ? `${pendingChangeSets.length} 个待确认` : pendingItems.length > 0 ? '待确认' : '未生成'}
+              </span>
+            </h3>
             <p>同步前保护点会保存正文、故事状态、平台规则和能力包。所有改动需要确认后才会写回。</p>
+            {latestChangeSet ? (
+              <div className="agent-writing-line-item">
+                <header>
+                  <strong>{latestChangeSet.title}</strong>
+                  <small>{latestChangeSet.status}</small>
+                </header>
+                <p>{latestChangeSet.summary}</p>
+              </div>
+            ) : null}
             <div className="agent-writing-change-summary">
               {pendingItems.length > 0 ? (
                 pendingItems.map((item) => (
@@ -1934,6 +2426,36 @@ const AgentWritingInspector = ({
                 </div>
               )}
             </div>
+            <div className="agent-writing-card__actions">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isRunningHarnessCommand}
+                onClick={() =>
+                  runInspectorHarnessCommand({
+                    command: 'analyze-revision-impact',
+                    chapterId: chapterDocument?.chapterId,
+                    intent: '请检查当前章变更会牵动哪些人物线、伏笔线和后文。'
+                  })
+                }
+              >
+                检查牵动范围
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isRunningHarnessCommand || !latestChangeSet}
+                onClick={() =>
+                  latestChangeSet &&
+                  onRunHarnessCommand({
+                    command: 'undo-change-set',
+                    changeSetId: latestChangeSet.changeSetId
+                  })
+                }
+              >
+                撤回变更包
+              </button>
+            </div>
             {latestRecord ? (
               <div className="diff-card">
                 <div>
@@ -1952,25 +2474,88 @@ const AgentWritingInspector = ({
         {activePane === 'risk' ? (
           <section className="agent-writing-panel">
             <h3>发布避雷 <span className="status-chip status-chip--slim status-chip--muted">{publishRiskLabel}</span></h3>
-            <p>目标平台规则会作为能力包读取。当前不会直接改正文，只生成建议或变更包。</p>
+            <p>目标平台：{writingPlatformLabel[targetPlatform]}。{targetPlatformRule}会作为能力包读取，当前不会直接改正文，只生成建议或变更包。</p>
             <div className="agent-writing-line-item">
-              <header><strong>{publishingFinding?.diagnosis ?? '等待平台检查'}</strong><small>{publishingFinding?.area ?? '未生成'}</small></header>
+              <header>
+                <strong>{latestPlatformRisk?.contextReason ?? publishingFinding?.diagnosis ?? '等待平台检查'}</strong>
+                <small>{latestPlatformRisk ? writingPlatformLabel[latestPlatformRisk.platform] : writingPlatformLabel[targetPlatform]}</small>
+              </header>
               <p>
-                {publishingFinding?.recommendation ??
+                {latestPlatformRisk?.suggestion ??
+                  publishingFinding?.recommendation ??
                   latestPublishFeedback ??
                   '可以让 Agent 按番茄、起点或自定义口径检查敏感表达、节奏和发布风险。'}
               </p>
               <div className="agent-writing-capsules">
-                <span className="memory-chip">平台规则包</span>
-                <span className="memory-chip">发布避雷</span>
+                <span className="memory-chip">开放风险 {openPlatformRisks.length}</span>
+                <span className="memory-chip memory-chip--warn">{targetPlatformRule}</span>
+                <span className="memory-chip">发布避雷能力</span>
               </div>
             </div>
             <div className="agent-writing-card__actions">
-              <button type="button" className="primary-button" onClick={() => onStartTask('请按目标平台给当前章做发布避雷检查，并生成待确认建议。')}>
-                按建议检查
+              {latestPlatformRisk ? (
+                <>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={isRunningHarnessCommand || latestPlatformRisk.status !== 'open'}
+                    onClick={() =>
+                      onRunHarnessCommand({
+                        command: 'update-platform-risk',
+                        riskId: latestPlatformRisk.riskId,
+                        status: 'resolved',
+                        reason: '作者确认已处理：当前发布风险已在正文或发布策略中收口。'
+                      })
+                    }
+                  >
+                    标记已处理
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={isRunningHarnessCommand || latestPlatformRisk.status !== 'open'}
+                    onClick={() =>
+                      onRunHarnessCommand({
+                        command: 'update-platform-risk',
+                        riskId: latestPlatformRisk.riskId,
+                        status: 'exempted',
+                        reason: '作者豁免：保留当前表达，并接受本次发布判断。'
+                      })
+                    }
+                  >
+                    作者豁免
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                className="primary-button"
+                disabled={isRunningHarnessCommand}
+                onClick={() =>
+                  runInspectorHarnessCommand({
+                    command: 'check-platform-risk',
+                    chapterId: chapterDocument?.chapterId,
+                    platform: targetPlatform,
+                    intent: `请按${targetPlatformRule}给当前章做发布避雷检查，并生成待确认建议。`
+                  })
+                }
+              >
+                {isRunningHarnessCommand ? '正在检查' : '检查发布风险'}
               </button>
-              <button type="button" className="ghost-button" onClick={() => onStartTask('记录这次发布风险，但不要修改正文。')}>
-                忽略并记录
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isRunningHarnessCommand}
+                onClick={() =>
+                  runInspectorHarnessCommand({
+                    command: 'check-platform-risk',
+                    chapterId: chapterDocument?.chapterId,
+                    platform: targetPlatform,
+                    intent: '请记录这次发布风险，只更新风险说明，不修改正文。'
+                  })
+                }
+              >
+                只记录风险
               </button>
             </div>
           </section>
@@ -1979,25 +2564,49 @@ const AgentWritingInspector = ({
         {activePane === 'clock' ? (
           <section className="agent-writing-panel">
             <h3>故事时光机</h3>
-            <p>最近一次 AI 更新可以完整撤回，也可以只撤回人物线、伏笔线或发布风险。真实保护点由 Lime App Server 写入。</p>
+            <p>最近一次 AI 更新可以完整撤回，也可以只撤回人物线、伏笔线或发布风险。保护点由本地运行服务写入。</p>
             <div className="agent-writing-line-item">
-              <header><strong>同步前保护点</strong><small>{chapterDocument?.lastEditedAt ?? '当前'}</small></header>
-              <p>包含正文、设定、人物线、伏笔线、平台规则和启用能力包。</p>
+              <header>
+                <strong>{latestProtectionPoint?.label ?? '同步前保护点'}</strong>
+                <small>{latestProtectionPoint?.createdAt ?? chapterDocument?.lastEditedAt ?? '当前'}</small>
+              </header>
+              <p>{latestProtectionPoint?.summary ?? '包含正文、设定、人物线、伏笔线、平台规则和启用能力包。'}</p>
             </div>
             <div className="agent-writing-line-item">
-              <header><strong>可撤回范围</strong><small>3 类</small></header>
+              <header><strong>可撤回范围</strong><small>{latestChangeSet?.patches.length ?? 0} 项</small></header>
               <div className="agent-writing-capsules">
-                <span className="memory-chip">人物线</span>
-                <span className="memory-chip">伏笔线</span>
-                <span className="memory-chip">发布风险</span>
+                <span className="memory-chip">人物线 {shell.characterStates.length}</span>
+                <span className="memory-chip">伏笔线 {shell.foreshadowingStates.length}</span>
+                <span className="memory-chip">发布风险 {openPlatformRisks.length}</span>
               </div>
             </div>
             <div className="agent-writing-card__actions">
-              <button type="button" className="ghost-button" onClick={() => onStartTask('请撤回最近一次 AI 更新，并说明会影响哪些故事资产。')}>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={isRunningHarnessCommand || !latestChangeSet}
+                onClick={() =>
+                  latestChangeSet &&
+                  onRunHarnessCommand({
+                    command: 'undo-change-set',
+                    changeSetId: latestChangeSet.changeSetId
+                  })
+                }
+              >
                 撤回这次更新
               </button>
-              <button type="button" className="primary-button" onClick={() => onStartTask('请说明当前章节最近一次同步前保护点包含哪些内容，不要修改正文。')}>
-                说明保护点
+              <button
+                type="button"
+                className="primary-button"
+                disabled={isRunningHarnessCommand}
+                onClick={() =>
+                  onRunHarnessCommand({
+                    command: 'undo-derived-state',
+                    changeSetId: latestChangeSet?.changeSetId
+                  })
+                }
+              >
+                只撤回故事状态
               </button>
             </div>
           </section>
@@ -2023,6 +2632,7 @@ export const NovelWorkbench = ({
   isApplyingAnalysisStrategy,
   isCreatingExportPackage,
   isGeneratingKnowledgeAnswer,
+  isRunningHarnessCommand,
   agentSettingsState,
   agentSettingsError,
   isAgentSettingsLoading,
@@ -2050,7 +2660,8 @@ export const NovelWorkbench = ({
   onCreateExportPackage,
   onCreateKnowledgeAnswer,
   onImportKnowledgeDocument,
-  onSaveAgentSettings
+  onSaveAgentSettings,
+  onRunHarnessCommand
 }: NovelWorkbenchProps) => {
   const activeChapterId = currentChapterId ?? chapterDocument?.chapterId ?? shell.project.currentChapterId
   const activeChapter =
@@ -2064,6 +2675,7 @@ export const NovelWorkbench = ({
   const [isAgentSidebarCollapsed, setAgentSidebarCollapsed] = useState(false)
   const [isWritingInspectorCollapsed, setWritingInspectorCollapsed] = useState(false)
   const [writingInspectorPane, setWritingInspectorPane] = useState<WritingInspectorPane>('state')
+  const [targetPlatform, setTargetPlatform] = useState<WritingPlatformId>('fanqie')
   const [createProjectForm, setCreateProjectForm] = useState<CreateProjectFormState>(buildDefaultCreateProjectForm)
   const isAnalysisToolActive = activeSurface === 'feature-center' && activeFeatureTool === 'analysis'
   const analysis = useAnalysisWorkbenchState(shell)
@@ -2073,13 +2685,17 @@ export const NovelWorkbench = ({
   const publish = usePublishWorkbenchState(shell, feedState.feed)
   const workspaceSearch = useWorkspaceSearch(shell.workspacePath)
   const agentRuntimeMode = agentSettingsState?.mode ?? 'legacy'
-  const agentRuntimeLabel = agentSettingsState ? runtimeProviderLabel[agentSettingsState.resolvedProvider] : '本地规则模式'
+  const agentRuntimeLabel = resolveRuntimeStatusLabel(agentSettingsState)
   const [renderedChapterId, setRenderedChapterId] = useState(activeChapterId ?? shell.chapterTree[0]?.chapterId)
   const renderedChapter =
     shell.chapterTree.find((chapter) => chapter.chapterId === renderedChapterId) ??
     shell.chapterTree.find((chapter) => chapter.chapterId === activeChapterId) ??
     shell.chapterTree[0]
   const selectedScene = shell.sceneList.find((scene) => scene.sceneId === selectedSceneId) ?? shell.sceneList[0]
+  const latestWritingProtectionPoint = shell.protectionPoints[0] ?? shell.storyState.protectionPoints[0]
+  const pendingWritingChangeCount = shell.changeSets.filter((changeSet) => changeSet.status === 'pending').length
+  const pendingWritingProposalCount = feedState.feed.filter(isPendingProposalItem).length
+  const writingPendingCount = Math.max(pendingWritingChangeCount, pendingWritingProposalCount)
 
   useEffect(() => {
     if (!shell.sceneList.some((scene) => scene.sceneId === selectedSceneId)) {
@@ -2308,47 +2924,161 @@ export const NovelWorkbench = ({
 
   return (
     <div className={shellClass}>
-      <header className={isFocusMode ? 'topbar topbar--focus' : 'topbar'}>
-        <button
-          type="button"
-          className="brand-lockup"
-          onClick={() => setSettingsModalOpen(true)}
-          aria-label="打开工作台设置"
-          aria-haspopup="dialog"
-          aria-expanded={isSettingsModalOpen}
-          title="打开工作台设置"
-        >
-          <img className="brand-mark" src={limeLogoUrl} alt="Lime Novel 标志" />
-          <span className="brand-lockup__tooltip" role="tooltip">
-            <span className="eyebrow">账户与设置</span>
-            <strong>{limeNovelBrand.name}</strong>
-            <span>点击打开工作台设置。后续这里会接入登录头像与账号入口。</span>
-          </span>
-        </button>
+      <header
+        className={[
+          'topbar',
+          isFocusMode ? 'topbar--focus' : '',
+          activeSurface === 'writing' ? 'topbar--writing' : ''
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        {activeSurface === 'writing' ? (
+          <>
+            <div className="topbar-writing__brandline">
+              <button
+                type="button"
+                className="brand-lockup"
+                onClick={() => setSettingsModalOpen(true)}
+                aria-label="打开工作台设置"
+                aria-haspopup="dialog"
+                aria-expanded={isSettingsModalOpen}
+                title="打开工作台设置"
+              >
+                <img className="brand-mark" src={limeLogoUrl} alt="Lime Novel 标志" />
+                <span className="brand-lockup__tooltip" role="tooltip">
+                  <span className="eyebrow">账户与设置</span>
+                  <strong>{limeNovelBrand.name}</strong>
+                  <span>点击打开工作台设置。后续这里会接入登录头像与账号入口。</span>
+                </span>
+              </button>
+              <div className="topbar-writing__book-title">
+                <strong>《{shell.project.title}》</strong>
+                <span>{activeChapter?.volumeLabel ?? shell.project.subtitle} · {activeChapter ? `第 ${activeChapter.order} 章` : '未选择章节'}</span>
+              </div>
+            </div>
 
-        <div className="topbar__tools">
-          <button
-            type="button"
-            className="command-trigger"
-            onClick={workspaceSearch.open}
-            aria-haspopup="dialog"
-            aria-expanded={workspaceSearch.isOpen}
-            title="搜索当前项目"
-          >
-            <span className="command-trigger__label">搜索章节 / 知识 / 设定 / 修订</span>
-            <span className="command-trigger__hint">⌘K</span>
-          </button>
+            <div className="topbar-writing__center">
+              <span className="topbar-writing__status-pill">
+                <i aria-hidden="true" />
+                {latestWritingProtectionPoint
+                  ? `${formatShortClock(latestWritingProtectionPoint.createdAt)} 保护点`
+                  : '等待同步前保护点'}
+                {writingPendingCount > 0 ? ` · ${writingPendingCount} 待确认` : ''}
+              </span>
+              <div className="topbar-writing__segmented" role="tablist" aria-label="目标平台">
+                {writingPlatformDefinitions.map((platform) => (
+                  <button
+                    key={platform.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={targetPlatform === platform.id}
+                    className={targetPlatform === platform.id ? 'is-active' : ''}
+                    title={platform.ruleLabel}
+                    onClick={() => setTargetPlatform(platform.id)}
+                  >
+                    {platform.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          {activeSurface === 'writing' ? (
+            <div className="topbar-writing__actions">
+              <button
+                type="button"
+                className="writing-icon-button"
+                onClick={() => {
+                  setWritingInspectorCollapsed(false)
+                  setWritingInspectorPane('clock')
+                }}
+                aria-label="打开故事时光机"
+                title="故事时光机"
+              >
+                ↶
+              </button>
+              <button
+                type="button"
+                className="writing-icon-button"
+                disabled={isRunningHarnessCommand}
+                onClick={() =>
+                  onRunHarnessCommand({
+                    command: 'sync-story-state',
+                    chapterId: activeChapterId,
+                    intent: '请先为当前写作状态创建同步前保护点，再整理故事状态。'
+                  })
+                }
+                aria-label="创建保护点"
+                title="创建保护点"
+              >
+                ◎
+              </button>
+              <button
+                type="button"
+                className="primary-button topbar-writing__sync"
+                disabled={isRunningHarnessCommand}
+                onClick={() =>
+                  onRunHarnessCommand({
+                    command: 'sync-story-state',
+                    intent: `请按${writingPlatformRuleLabel[targetPlatform]}一键同步全书故事状态，并整理待确认变更包。`
+                  })
+                }
+              >
+                {isRunningHarnessCommand ? '同步中' : '一键同步'}
+              </button>
+              <button
+                type="button"
+                className="command-trigger command-trigger--compact"
+                onClick={workspaceSearch.open}
+                aria-haspopup="dialog"
+                aria-expanded={workspaceSearch.isOpen}
+                title="搜索当前项目"
+              >
+                <span className="command-trigger__label">搜索</span>
+                <span className="command-trigger__hint">⌘K</span>
+              </button>
+              <button
+                type="button"
+                className={isFocusMode ? 'ghost-button topbar__toggle topbar__toggle--active' : 'ghost-button topbar__toggle'}
+                onClick={() => setFocusMode((value) => !value)}
+              >
+                {isFocusMode ? '退出专注' : '专注写作'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
             <button
               type="button"
-              className={isFocusMode ? 'ghost-button topbar__toggle topbar__toggle--active' : 'ghost-button topbar__toggle'}
-              onClick={() => setFocusMode((value) => !value)}
+              className="brand-lockup"
+              onClick={() => setSettingsModalOpen(true)}
+              aria-label="打开工作台设置"
+              aria-haspopup="dialog"
+              aria-expanded={isSettingsModalOpen}
+              title="打开工作台设置"
             >
-              {isFocusMode ? '退出专注' : '专注写作'}
+              <img className="brand-mark" src={limeLogoUrl} alt="Lime Novel 标志" />
+              <span className="brand-lockup__tooltip" role="tooltip">
+                <span className="eyebrow">账户与设置</span>
+                <strong>{limeNovelBrand.name}</strong>
+                <span>点击打开工作台设置。后续这里会接入登录头像与账号入口。</span>
+              </span>
             </button>
-          ) : null}
-        </div>
+
+            <div className="topbar__tools">
+              <button
+                type="button"
+                className="command-trigger"
+                onClick={workspaceSearch.open}
+                aria-haspopup="dialog"
+                aria-expanded={workspaceSearch.isOpen}
+                title="搜索当前项目"
+              >
+                <span className="command-trigger__label">搜索章节 / 知识 / 设定 / 修订</span>
+                <span className="command-trigger__hint">⌘K</span>
+              </button>
+            </div>
+          </>
+        )}
       </header>
 
       <div className="workspace-stage">
@@ -2438,6 +3168,8 @@ export const NovelWorkbench = ({
                     onPreviewChapter={setRenderedChapterId}
                     onSelectScene={setSelectedSceneId}
                     onStartTask={onStartTask}
+                    onRunHarnessCommand={onRunHarnessCommand}
+                    isRunningHarnessCommand={isRunningHarnessCommand}
                   />
                 ) : null}
                 {activeSurface === 'knowledge' ? (
@@ -2503,6 +3235,8 @@ export const NovelWorkbench = ({
                 onCreateProjectRequest={() => setCreateProjectModalOpen(true)}
                 onSelectChapter={onSelectChapter}
                 onStartTask={onStartTask}
+                onRunHarnessCommand={onRunHarnessCommand}
+                isRunningHarnessCommand={isRunningHarnessCommand}
               />
             ) : null}
             {activeSurface === 'writing' ? (
@@ -2514,11 +3248,14 @@ export const NovelWorkbench = ({
                 feedState={feedState}
                 activityLabel={activityLabel}
                 runtimeLabel={agentRuntimeLabel}
+                targetPlatform={targetPlatform}
                 onSelectChapter={onSelectChapter}
                 onStartTask={onStartTask}
+                onRunHarnessCommand={onRunHarnessCommand}
                 onApplyProposal={onApplyProposal}
                 onRejectProposal={onRejectProposal}
                 onSaveChapter={onSaveChapter}
+                isRunningHarnessCommand={isRunningHarnessCommand}
               />
             ) : null}
             {activeSurface === 'knowledge' ? (
@@ -2601,12 +3338,15 @@ export const NovelWorkbench = ({
                 selectedScene={selectedScene}
                 feedState={feedState}
                 runtimeLabel={agentRuntimeLabel}
+                targetPlatform={targetPlatform}
                 activePane={writingInspectorPane}
                 onPaneChange={setWritingInspectorPane}
                 onCollapse={() => setWritingInspectorCollapsed(true)}
                 onStartTask={onStartTask}
+                onRunHarnessCommand={onRunHarnessCommand}
                 onApplyProposal={onApplyProposal}
                 onRejectProposal={onRejectProposal}
+                isRunningHarnessCommand={isRunningHarnessCommand}
               />
             )
           ) : null}

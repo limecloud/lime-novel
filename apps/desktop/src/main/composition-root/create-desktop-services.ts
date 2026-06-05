@@ -16,6 +16,7 @@ import {
   createLoadChapterDocumentUseCase,
   createLoadWorkspaceShellUseCase,
   createRejectProposalUseCase,
+  createRunHarnessCommandUseCase,
   createSaveChapterDocumentUseCase,
   createSearchWorkspaceUseCase,
   createUndoRevisionRecordUseCase,
@@ -24,11 +25,12 @@ import {
 } from '@lime-novel/application'
 import {
   createConfiguredLLMProvider,
-  createLocalAgentRuntime,
   resolveAgentRuntimeConfig
 } from '@lime-novel/agent-runtime'
 import { createFileSystemNovelRepository, createNovelProjectWorkspace } from '@lime-novel/infrastructure'
 import { join } from 'node:path'
+import { enrichAppServerRuntimeMetadata } from '../app-server/app-server-client-adapter'
+import { createLimeAppServerRuntime, resolveAppServerRuntimeConfig } from '../app-server/lime-app-server-runtime'
 import { createAgentRuntimeSettingsStore } from './agent-runtime-settings-store'
 import { createWorkspaceStateStore } from './workspace-state'
 
@@ -64,13 +66,33 @@ const buildAgentRuntimeSettingsState = (
   settings: AgentRuntimeSettingsDto
 ): AgentRuntimeSettingsStateDto => {
   const runtimeConfig = resolveAgentRuntimeConfig(toAgentRuntimeEnv(settings))
+  let appServer: AgentRuntimeSettingsStateDto['appServer']
+
+  try {
+    const appServerConfig = resolveAppServerRuntimeConfig()
+    appServer = {
+      mode: 'external',
+      binaryPath: appServerConfig.binaryPath,
+      backendCommand: appServerConfig.backendCommand
+    }
+  } catch {
+    appServer = {
+      mode: 'unconfigured'
+    }
+  }
 
   return {
     settings,
     resolvedProvider: runtimeConfig.provider,
-    resolvedBaseUrl: runtimeConfig.baseUrl,
-    resolvedModel: runtimeConfig.provider === 'legacy' ? '规则型本地收口' : runtimeConfig.model,
-    mode: runtimeConfig.provider === 'legacy' ? 'legacy' : 'live'
+    resolvedBaseUrl: appServer.mode === 'external' ? appServer.binaryPath ?? '' : runtimeConfig.baseUrl,
+    resolvedModel:
+      appServer.mode === 'external'
+        ? 'Lime App Server external backend'
+        : runtimeConfig.provider === 'legacy'
+          ? '未配置 Lime App Server external backend'
+          : runtimeConfig.model,
+    mode: appServer.mode === 'external' ? 'live' : 'legacy',
+    appServer
   }
 }
 
@@ -138,10 +160,7 @@ export const createDesktopServices = async () => {
   })
   const workspaceStateStore = createWorkspaceStateStore(app.getPath('userData'), projectsRoot)
   let repository = createFileSystemNovelRepository(await workspaceStateStore.resolveInitialWorkspace())
-  const agentRuntime = createLocalAgentRuntime(() => repository, async () => {
-    const settings = await agentRuntimeSettingsStore.load()
-    return resolveAgentRuntimeConfig(toAgentRuntimeEnv(settings))
-  })
+  const agentRuntime = createLimeAppServerRuntime(() => repository)
 
   const switchWorkspace = async (workspacePath: string) => {
     await access(join(workspacePath, 'novel.json'))
@@ -256,11 +275,21 @@ export const createDesktopServices = async () => {
     undoRevisionRecord: (recordId: string) => createUndoRevisionRecordUseCase(repository)(recordId),
     createExportPackage: (input: Parameters<ReturnType<typeof createCreateExportPackageUseCase>>[0]) =>
       createCreateExportPackageUseCase(repository)(input),
+    runHarnessCommand: (input: Parameters<ReturnType<typeof createRunHarnessCommandUseCase>>[0]) =>
+      createRunHarnessCommandUseCase(repository)(input),
     loadAgentRuntimeSettings: async () => buildAgentRuntimeSettingsState(await agentRuntimeSettingsStore.load()),
     saveAgentRuntimeSettings: async (input: AgentRuntimeSettingsDto) =>
       buildAgentRuntimeSettingsState(await agentRuntimeSettingsStore.save(input)),
     testAgentRuntimeSettings: (input: AgentRuntimeSettingsDto) => testAgentRuntimeSettingsConnection(input),
-    startAgentTask: (input: Parameters<typeof agentRuntime.startTask>[0]) => agentRuntime.startTask(input),
+    startAgentTask: async (input: Parameters<typeof agentRuntime.startTask>[0]) => {
+      const shell = await repository.loadWorkspaceShell()
+
+      return agentRuntime.startTask(
+        enrichAppServerRuntimeMetadata(input, {
+          projectId: shell.project.projectId
+        })
+      )
+    },
     loadAgentTaskDiagnostics: () => agentRuntime.loadTaskDiagnostics()
   }
 }

@@ -35,6 +35,9 @@ const api: DesktopApiContract = {
   publish: {
     createExportPackage: (input) => ipcRenderer.invoke(CHANNELS.publish.createExportPackage, input)
   },
+  harness: {
+    runCommand: (input) => ipcRenderer.invoke(CHANNELS.harness.runCommand, input)
+  },
   agent: {
     loadSettings: () => ipcRenderer.invoke(CHANNELS.agent.loadSettings),
     saveSettings: (input) => ipcRenderer.invoke(CHANNELS.agent.saveSettings, input),

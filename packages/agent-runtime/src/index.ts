@@ -35,6 +35,9 @@ const buildRuntimeStartSummary = (
   return `OpenAI Compatible（${config.model}）执行中：${input.intent}`
 }
 
+const requiresLiveProvider = (input: StartTaskInputDto): boolean =>
+  input.runtimeOptions?.metadata?.requiresLive === true
+
 export class LocalAgentRuntime implements AgentRuntimePort {
   private listeners = new Set<(event: TaskEventDto) => void>()
   private diagnosticsByTaskId = new Map<string, AgentTaskDiagnosticsDto>()
@@ -129,9 +132,13 @@ export class LocalAgentRuntime implements AgentRuntimePort {
 
     try {
       const runtimeConfig = await this.resolveRuntimeConfig()
-      await input.session.updateRunningSummary(buildRuntimeStartSummary(runtimeConfig, input.input))
       const provider = createConfiguredLLMProvider(runtimeConfig)
 
+      if (provider == null && requiresLiveProvider(input.input)) {
+        throw new Error('当前任务需要真实 AI 运行服务，请在 AI Agent 设置中配置 live provider、模型和 API Key 后重试。')
+      }
+
+      await input.session.updateRunningSummary(buildRuntimeStartSummary(runtimeConfig, input.input))
       executionResult =
         provider == null
           ? await executeLegacyAgentSession(input.repository, input.shell, input.input)
