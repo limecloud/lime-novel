@@ -24,7 +24,8 @@
     "governance:legacy-report": "node scripts/governance-legacy-report.mjs",
     "test:contracts": "node scripts/governance-legacy-report.mjs --contracts",
     "verify:runtime-smoke": "node scripts/runtime-smoke.mjs",
-    "verify:local": "npm run build && npm run verify:runtime-smoke",
+    "verify:app-server-runtime": "node scripts/app-server-runtime-smoke.mjs",
+    "verify:local": "npm run build && npm run verify:runtime-smoke && npm run verify:app-server-runtime",
     "verify:gui-smoke": "node scripts/gui-smoke.mjs"
   },
   "dependencies": {

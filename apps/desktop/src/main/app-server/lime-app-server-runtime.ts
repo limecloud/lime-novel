@@ -2,12 +2,17 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline'
+import { resolve } from 'node:path'
 import type {
   AgentFeedItemDto,
   AgentTaskDiagnosticsDto,
   AgentTaskDto,
   AgentTraceEntryDto,
   AgentRuntimePort,
+  HarnessActionDto,
+  HarnessArtifactDto,
+  HarnessEvidenceDto,
+  HarnessTargetRefDto,
   ProjectRepositoryPort,
   StartTaskInputDto,
   StartTaskResultDto,
@@ -36,6 +41,15 @@ type JsonRpcResponse = {
   }
 }
 
+type AppServerAgentTurnStartResponse = {
+  turn?: {
+    sessionId?: string
+    threadId?: string
+    turnId?: string
+    status?: string
+  }
+}
+
 type AppServerAgentEvent = {
   eventId: string
   sequence: number
@@ -47,9 +61,54 @@ type AppServerAgentEvent = {
   payload?: unknown
 }
 
+type AppServerArtifactSummary = {
+  artifactRef?: string
+  eventId?: string
+  sequence?: number
+  turnId?: string
+  artifactId?: string
+  path?: string
+  title?: string
+  kind?: string
+  status?: string
+  content?: string
+  contentStatus?: string
+}
+
+type AppServerEvidencePackArtifact = {
+  kind?: string
+  title?: string
+  relativePath?: string
+  absolutePath?: string
+  bytes?: number
+}
+
+type AppServerEvidencePackSummary = {
+  packRelativeRoot?: string
+  packAbsoluteRoot?: string
+  exportedAt?: string
+  threadStatus?: string
+  latestTurnStatus?: string
+  turnCount?: number
+  itemCount?: number
+  pendingRequestCount?: number
+  queuedTurnCount?: number
+  recentArtifactCount?: number
+  knownGaps?: string[]
+  artifacts?: AppServerEvidencePackArtifact[]
+}
+
+type AppServerEvidenceExportResponse = {
+  events?: AppServerAgentEvent[]
+  artifacts?: AppServerArtifactSummary[]
+  exportedAt?: string
+  evidencePack?: AppServerEvidencePackSummary
+}
+
 type AppServerConnection = {
   child: ChildProcessWithoutNullStreams
   lines: ReadlineInterface
+  envKey: string
   pending: Map<number, {
     resolve: (value: unknown) => void
     reject: (error: Error) => void
@@ -57,6 +116,8 @@ type AppServerConnection = {
   }>
   nextId: number
 }
+
+type RuntimeEnvResolver = () => NodeJS.ProcessEnv | Promise<NodeJS.ProcessEnv>
 
 type AppServerRuntimeConfig = {
   binaryPath: string
@@ -76,6 +137,9 @@ type RunningTask = {
 const METHOD_AGENT_SESSION_EVENT = 'agentSession/event'
 const APP_SERVER_PROTOCOL_VERSION = 'appserver.v0'
 const MAX_TRACE_ENTRIES = 80
+const DEFAULT_TURN_COMPLETION_GRACE_MS = 500
+const APP_SERVER_BINARY_NAME = process.platform === 'win32' ? 'app-server.exe' : 'app-server'
+const APP_SERVER_PLATFORM_DIR = `${process.platform}-${process.arch}`
 const BUILT_IN_BACKEND_PATH_CANDIDATES = [
   fileURLToPath(new URL('./lime-novel-agent-backend.mjs', import.meta.url)),
   fileURLToPath(new URL('../app-server/lime-novel-agent-backend.mjs', import.meta.url))
@@ -121,19 +185,74 @@ const parseBackendArgs = (env: NodeJS.ProcessEnv): string[] => {
 
 const hasLiveModelConfig = (env: NodeJS.ProcessEnv): boolean => {
   const provider = env.LIME_NOVEL_AGENT_PROVIDER?.trim()
-  const hasExplicitLiveProvider = provider === 'anthropic' || provider === 'openai-compatible'
-  const hasLiveSignal = Boolean(env.LIME_NOVEL_AGENT_API_KEY?.trim() || env.LIME_NOVEL_AGENT_MODEL?.trim())
+  const apiKey = env.LIME_NOVEL_AGENT_API_KEY?.trim()
+  const baseUrl = env.LIME_NOVEL_AGENT_BASE_URL?.trim()
+  const model = env.LIME_NOVEL_AGENT_MODEL?.trim()
 
-  return hasExplicitLiveProvider || (!provider && hasLiveSignal)
+  if (provider === 'anthropic') {
+    return Boolean(apiKey)
+  }
+
+  if (provider === 'openai-compatible') {
+    return Boolean(apiKey || baseUrl)
+  }
+
+  return Boolean(apiKey || (baseUrl && model))
+}
+
+const resolveAppServerBinaryPath = (env: NodeJS.ProcessEnv): string | undefined => {
+  const explicitPath = env.LIME_APP_SERVER_BIN?.trim() || env.APP_SERVER_BIN?.trim()
+
+  if (explicitPath) {
+    return explicitPath
+  }
+
+  const resourceRoots = [
+    env.LIME_APP_SERVER_RESOURCE_ROOT?.trim(),
+    env.APP_SERVER_RESOURCE_ROOT?.trim(),
+    process.resourcesPath,
+    resolve(process.cwd(), 'dist-electron'),
+    resolve(process.cwd(), 'apps/desktop/dist-electron'),
+    resolve(process.cwd(), '..', 'lime', 'dist-electron'),
+    resolve(process.cwd(), '..', '..', 'aiclientproxy', 'lime', 'dist-electron'),
+    resolve(process.cwd(), '..', 'aiclientproxy', 'lime', 'dist-electron')
+  ].filter((path): path is string => Boolean(path))
+
+  for (const resourceRoot of resourceRoots) {
+    const candidate = resolve(resourceRoot, 'app-server', APP_SERVER_PLATFORM_DIR, APP_SERVER_BINARY_NAME)
+
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return undefined
+}
+
+const buildConnectionEnvKey = (env: NodeJS.ProcessEnv): string =>
+  JSON.stringify({
+    binaryPath: resolveAppServerBinaryPath(env),
+    backendCommand: env.LIME_APP_SERVER_BACKEND_COMMAND?.trim() ?? '',
+    backendArgs: env.LIME_APP_SERVER_BACKEND_ARGS_JSON?.trim() ?? '',
+    backendTimeoutMs: env.LIME_APP_SERVER_BACKEND_TIMEOUT_MS?.trim() ?? '',
+    provider: env.LIME_NOVEL_AGENT_PROVIDER?.trim() ?? '',
+    baseUrl: env.LIME_NOVEL_AGENT_BASE_URL?.trim() ?? '',
+    apiKey: env.LIME_NOVEL_AGENT_API_KEY?.trim() ?? '',
+    model: env.LIME_NOVEL_AGENT_MODEL?.trim() ?? ''
+  })
+
+const resolveTurnCompletionGraceMs = (env: NodeJS.ProcessEnv): number => {
+  const configured = Number.parseInt(env.LIME_APP_SERVER_TURN_COMPLETION_GRACE_MS ?? '', 10)
+  return Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_TURN_COMPLETION_GRACE_MS
 }
 
 export const resolveAppServerRuntimeConfig = (env: NodeJS.ProcessEnv = process.env): AppServerRuntimeConfig => {
-  const binaryPath = env.LIME_APP_SERVER_BIN?.trim() || env.APP_SERVER_BIN?.trim()
+  const binaryPath = resolveAppServerBinaryPath(env)
   const configuredBackendCommand = env.LIME_APP_SERVER_BACKEND_COMMAND?.trim()
   const backendTimeoutMs = Number.parseInt(env.LIME_APP_SERVER_BACKEND_TIMEOUT_MS ?? '', 10)
 
   if (!binaryPath) {
-    throw new Error('缺少 LIME_APP_SERVER_BIN 或 APP_SERVER_BIN，无法启动真实 Lime App Server。')
+    throw new Error('缺少 LIME_APP_SERVER_BIN / APP_SERVER_BIN，且未发现可用 App Server sidecar。')
   }
 
   if (configuredBackendCommand) {
@@ -211,6 +330,48 @@ const resolveEventTitle = (event: AppServerAgentEvent): string => {
   return 'App Server 事件'
 }
 
+const resolveEventRefId = (event: AppServerAgentEvent, fallbackPrefix: string): string => {
+  const payload = toObject(event.payload)
+  const candidates = ['artifactId', 'artifactRef', 'evidenceId', 'actionId', 'id']
+
+  for (const key of candidates) {
+    const value = payload[key]
+
+    if (typeof value === 'string' && value.trim()) {
+      return sanitizeRuntimeId(value.trim())
+    }
+  }
+
+  return sanitizeRuntimeId(`${fallbackPrefix}_${event.eventId}`)
+}
+
+const buildTargetRef = (running: RunningTask, event: AppServerAgentEvent): HarnessTargetRefDto => {
+  const payload = toObject(event.payload)
+  const metadata = toObject(running.input.runtimeOptions?.metadata)
+  const target = toObject(metadata.target)
+  const businessObjectRef = toObject(metadata.businessObjectRef)
+  const refId =
+    typeof target.id === 'string'
+      ? target.id
+      : typeof businessObjectRef.id === 'string'
+        ? businessObjectRef.id
+        : running.input.chapterId ?? running.task.surface
+  const label =
+    typeof target.label === 'string'
+      ? target.label
+      : typeof businessObjectRef.title === 'string'
+        ? businessObjectRef.title
+        : typeof payload.title === 'string'
+          ? payload.title
+          : running.task.title
+
+  return {
+    refId: sanitizeRuntimeId(refId),
+    kind: running.input.chapterId ? 'chapter' : 'project',
+    label
+  }
+}
+
 const isTerminalSuccessEvent = (eventType: string): boolean =>
   eventType === 'turn.completed' || eventType === 'turn.done' || eventType === 'turn.final_done'
 
@@ -223,6 +384,138 @@ const shouldCreateFeedItem = (eventType: string): boolean =>
   eventType.includes('evidence') ||
   isTerminalFailureEvent(eventType)
 
+const supportedHarnessArtifactKinds = new Set<HarnessArtifactDto['kind']>([
+  'context-bundle',
+  'character-state',
+  'foreshadowing-state',
+  'impact-analysis',
+  'platform-risk',
+  'reader-feedback',
+  'change-set',
+  'sync-summary'
+])
+
+const resolveHarnessArtifactKindValue = (
+  kindValue: unknown,
+  eventType = ''
+): HarnessArtifactDto['kind'] => {
+  const kind = typeof kindValue === 'string' ? kindValue : ''
+
+  if (supportedHarnessArtifactKinds.has(kind as HarnessArtifactDto['kind'])) {
+    return kind as HarnessArtifactDto['kind']
+  }
+
+  if (isTerminalSuccessEvent(eventType) || isTerminalFailureEvent(eventType)) {
+    return 'sync-summary'
+  }
+
+  if (eventType.includes('impact')) {
+    return 'impact-analysis'
+  }
+
+  if (eventType.includes('risk')) {
+    return 'platform-risk'
+  }
+
+  if (eventType.includes('feedback')) {
+    return 'reader-feedback'
+  }
+
+  return 'sync-summary'
+}
+
+const resolveHarnessArtifactKind = (event: AppServerAgentEvent): HarnessArtifactDto['kind'] =>
+  resolveHarnessArtifactKindValue(toObject(event.payload).kind, event.type)
+
+const getExportEvidencePackId = (event: AppServerAgentEvent): string =>
+  sanitizeRuntimeId(`app_server_evidence_pack_${event.sessionId}_${event.turnId ?? 'turn'}`)
+
+const getExportEventLogEvidenceId = (event: AppServerAgentEvent): string =>
+  sanitizeRuntimeId(`app_server_event_log_${event.sessionId}_${event.turnId ?? 'turn'}`)
+
+const getExportEvidenceIds = (event: AppServerAgentEvent, exportResult: AppServerEvidenceExportResponse): string[] => {
+  const evidenceIds: string[] = []
+
+  if (exportResult.evidencePack) {
+    evidenceIds.push(getExportEvidencePackId(event))
+  }
+
+  if ((exportResult.events?.length ?? 0) > 0) {
+    evidenceIds.push(getExportEventLogEvidenceId(event))
+  }
+
+  return evidenceIds
+}
+
+const summarizeExportedArtifact = (artifact: AppServerArtifactSummary): string => {
+  const parts = [
+    artifact.status ? `status=${artifact.status}` : undefined,
+    artifact.path ? `path=${artifact.path}` : undefined,
+    artifact.contentStatus ? `content=${artifact.contentStatus}` : undefined
+  ].filter((part): part is string => Boolean(part))
+
+  if (artifact.content?.trim()) {
+    parts.push(artifact.content.trim().slice(0, 180))
+  }
+
+  return parts.join('；') || artifact.artifactRef || artifact.artifactId || 'App Server exported artifact'
+}
+
+const summarizeEvidencePack = (pack: AppServerEvidencePackSummary): string => {
+  const parts = [
+    pack.threadStatus ? `thread=${pack.threadStatus}` : undefined,
+    pack.latestTurnStatus ? `turn=${pack.latestTurnStatus}` : undefined,
+    typeof pack.turnCount === 'number' ? `turns=${pack.turnCount}` : undefined,
+    typeof pack.itemCount === 'number' ? `items=${pack.itemCount}` : undefined,
+    typeof pack.recentArtifactCount === 'number' ? `artifacts=${pack.recentArtifactCount}` : undefined,
+    pack.knownGaps?.length ? `gaps=${pack.knownGaps.join(',')}` : undefined
+  ].filter((part): part is string => Boolean(part))
+
+  return parts.join('；') || 'App Server evidence pack exported'
+}
+
+const summarizeExportedEvents = (events: AppServerAgentEvent[]): string => {
+  const eventTypes = [...new Set(events.map((event) => event.type).filter(Boolean))]
+  return `App Server exported ${events.length} events${eventTypes.length > 0 ? `：${eventTypes.join(', ')}` : ''}`
+}
+
+const describeEvidencePackArtifacts = (pack: AppServerEvidencePackSummary): string => {
+  const artifacts = pack.artifacts ?? []
+
+  if (artifacts.length === 0) {
+    return summarizeEvidencePack(pack)
+  }
+
+  const artifactLines = artifacts
+    .slice(0, 6)
+    .map((artifact) => {
+      const path = artifact.relativePath ?? artifact.absolutePath ?? ''
+      const bytes = typeof artifact.bytes === 'number' ? ` (${artifact.bytes} bytes)` : ''
+      return `${artifact.kind ?? 'artifact'} ${artifact.title ?? path}${path ? ` @ ${path}` : ''}${bytes}`
+    })
+
+  return `${summarizeEvidencePack(pack)}\n${artifactLines.join('\n')}`
+}
+
+const buildSyntheticTurnCompletedEvent = (
+  turnStartResult: AppServerAgentTurnStartResponse,
+  sessionId: string,
+  threadId: string,
+  turnId: string
+): AppServerAgentEvent => ({
+  eventId: sanitizeRuntimeId(`turn_completed_${sessionId}_${turnId}`),
+  sequence: 0,
+  sessionId: turnStartResult.turn?.sessionId ?? sessionId,
+  threadId: turnStartResult.turn?.threadId ?? threadId,
+  turnId: turnStartResult.turn?.turnId ?? turnId,
+  type: 'turn.completed',
+  timestamp: nowIso(),
+  payload: {
+    summary: 'Lime App Server turn 已返回，正在同步 evidence/export。',
+    status: turnStartResult.turn?.status ?? 'accepted'
+  }
+})
+
 const buildTask = (input: StartTaskInputDto): AgentTaskDto => ({
   taskId: createId('task'),
   title: titleBySurface[input.surface] ?? 'Lime App Server 任务',
@@ -234,13 +527,13 @@ const buildTask = (input: StartTaskInputDto): AgentTaskDto => ({
 
 export class LimeAppServerRuntime implements AgentRuntimePort {
   private listeners = new Set<(event: TaskEventDto) => void>()
-  private connectionPromise?: Promise<AppServerConnection>
+  private connectionPromises = new Map<string, Promise<AppServerConnection>>()
   private readonly runningTasks = new Map<string, RunningTask>()
   private readonly diagnosticsByTaskId = new Map<string, AgentTaskDiagnosticsDto>()
 
   constructor(
     private readonly getRepository: () => ProjectRepositoryPort,
-    private readonly env: NodeJS.ProcessEnv = process.env
+    private readonly resolveRuntimeEnv: RuntimeEnvResolver = () => process.env
   ) {}
 
   subscribe(listener: (event: TaskEventDto) => void): () => void {
@@ -272,19 +565,18 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
   }
 
   async dispose(): Promise<void> {
-    const connection = await this.connectionPromise?.catch(() => undefined)
+    const connections = await Promise.all([...this.connectionPromises.values()].map((promise) => promise.catch(() => undefined)))
+    this.connectionPromises.clear()
 
-    if (!connection) {
-      return
+    for (const connection of connections) {
+      connection?.lines.close()
+      connection?.child.kill()
     }
-
-    connection.lines.close()
-    connection.child.kill()
-    this.connectionPromise = undefined
   }
 
   private async runTask(task: AgentTaskDto, input: StartTaskInputDto): Promise<void> {
     const sessionId = sanitizeRuntimeId(`lime_novel_${task.taskId}`)
+    const threadId = `${sessionId}_thread`
     const turnId = sanitizeRuntimeId(`turn_${task.taskId}`)
     this.runningTasks.set(turnId, {
       task,
@@ -300,13 +592,14 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
       })
 
       const shell = await this.getRepository().loadWorkspaceShell()
-      const connection = await this.ensureConnection()
+      const runtimeEnv = await this.resolveRuntimeEnv()
+      const connection = await this.ensureConnection(runtimeEnv)
       const projectId = shell.project.projectId
       const metadata = toObject(input.runtimeOptions?.metadata)
 
       await this.sendRequest(connection, 'agentSession/start', {
         sessionId,
-        threadId: `${sessionId}_thread`,
+        threadId,
         appId: 'lime-novel',
         workspaceId: projectId,
         locale: 'zh-CN',
@@ -322,7 +615,7 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
         }
       })
 
-      await this.sendRequest(connection, 'agentSession/turn/start', {
+      const turnStartResult = toObject(await this.sendRequest(connection, 'agentSession/turn/start', {
         sessionId,
         turnId,
         input: {
@@ -341,28 +634,61 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
           }
         },
         queueIfBusy: true
-      })
+      })) as AppServerAgentTurnStartResponse
 
-      const current = this.runningTasks.get(turnId)
+      if (!(await this.waitForTerminal(turnId, resolveTurnCompletionGraceMs(runtimeEnv)))) {
+        const current = this.runningTasks.get(turnId)
 
-      if (current && !current.terminal) {
-        await this.failTask(turnId, 'Lime App Server turn 结束时没有返回 turn.completed / turn.failed 终止事件。')
+        if (current && !current.terminal) {
+          const completedEvent = buildSyntheticTurnCompletedEvent(turnStartResult, sessionId, threadId, turnId)
+          current.terminal = true
+          await this.exportTurnEvidence(connection, current, completedEvent)
+          await this.upsertRuntimeArtifact(current, completedEvent)
+          await this.updateTask(task.taskId, {
+            status: 'completed',
+            summary: summarizePayload(completedEvent.payload)
+          })
+        }
       }
     } catch (error) {
       await this.failTask(turnId, error instanceof Error ? error.message : 'Lime App Server 任务启动失败。')
     }
   }
 
-  private ensureConnection(): Promise<AppServerConnection> {
-    if (!this.connectionPromise) {
-      this.connectionPromise = this.connect()
+  private async waitForTerminal(turnId: string, timeoutMs: number): Promise<boolean> {
+    const startedAt = Date.now()
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const running = this.runningTasks.get(turnId)
+
+      if (!running || running.terminal) {
+        return true
+      }
+
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250))
     }
 
-    return this.connectionPromise
+    return this.runningTasks.get(turnId)?.terminal === true
   }
 
-  private async connect(): Promise<AppServerConnection> {
-    const config = resolveAppServerRuntimeConfig(this.env)
+  private ensureConnection(env: NodeJS.ProcessEnv): Promise<AppServerConnection> {
+    const envKey = buildConnectionEnvKey(env)
+    const existingConnection = this.connectionPromises.get(envKey)
+
+    if (existingConnection) {
+      return existingConnection
+    }
+
+    const nextConnection = this.connect(env, envKey).catch((error) => {
+      this.connectionPromises.delete(envKey)
+      throw error
+    })
+    this.connectionPromises.set(envKey, nextConnection)
+    return nextConnection
+  }
+
+  private async connect(env: NodeJS.ProcessEnv, envKey: string): Promise<AppServerConnection> {
+    const config = resolveAppServerRuntimeConfig(env)
     const args = [
       '--stdio',
       '--backend',
@@ -377,7 +703,7 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
     }
 
     const childEnv = {
-      ...this.env,
+      ...env,
       ...(config.usesBuiltInBackend && process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {})
     }
     const child = spawn(config.binaryPath, args, {
@@ -388,6 +714,7 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
     const connection: AppServerConnection = {
       child,
       lines,
+      envKey,
       pending: new Map(),
       nextId: 1
     }
@@ -408,7 +735,7 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
       }
 
       connection.pending.clear()
-      this.connectionPromise = undefined
+      this.connectionPromises.delete(connection.envKey)
     })
 
     lines.on('line', (line) => {
@@ -471,7 +798,7 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
     }
 
     if (message.method === METHOD_AGENT_SESSION_EVENT) {
-      void this.handleAgentSessionEvent(message)
+      void this.handleAgentSessionEvent(connection, message)
     }
   }
 
@@ -491,7 +818,7 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
     connection.child.stdin.write(`${JSON.stringify(notification)}\n`)
   }
 
-  private async handleAgentSessionEvent(notification: JsonRpcNotification): Promise<void> {
+  private async handleAgentSessionEvent(connection: AppServerConnection, notification: JsonRpcNotification): Promise<void> {
     const params = toObject(notification.params)
     const event = toObject(params.event) as Partial<AppServerAgentEvent>
 
@@ -506,14 +833,25 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
     }
 
     const appServerEvent = event as AppServerAgentEvent
+    const isSuccess = isTerminalSuccessEvent(appServerEvent.type)
+    const isFailure = isTerminalFailureEvent(appServerEvent.type)
+
+    if (isSuccess || isFailure) {
+      running.terminal = true
+    }
+
     this.recordDiagnostics(running, appServerEvent)
+    await this.projectHarnessEvent(running, appServerEvent)
 
     if (shouldCreateFeedItem(appServerEvent.type)) {
       await this.appendFeedItem(running.task, appServerEvent)
     }
 
-    if (isTerminalSuccessEvent(appServerEvent.type)) {
-      running.terminal = true
+    if (isSuccess || isFailure) {
+      await this.exportTurnEvidence(connection, running, appServerEvent)
+    }
+
+    if (isSuccess) {
       await this.updateTask(running.task.taskId, {
         status: 'completed',
         summary: summarizePayload(appServerEvent.payload) || 'Lime App Server turn 已完成。'
@@ -521,8 +859,7 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
       return
     }
 
-    if (isTerminalFailureEvent(appServerEvent.type)) {
-      running.terminal = true
+    if (isFailure) {
       await this.updateTask(running.task.taskId, {
         status: 'failed',
         summary: summarizePayload(appServerEvent.payload) || 'Lime App Server turn 执行失败。'
@@ -535,6 +872,44 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
         status: 'running',
         summary: summarizePayload(appServerEvent.payload) || 'Lime App Server turn 正在执行。'
       })
+    }
+  }
+
+  private async exportTurnEvidence(
+    connection: AppServerConnection,
+    running: RunningTask,
+    terminalEvent: AppServerAgentEvent
+  ): Promise<void> {
+    try {
+      const exportResult = toObject(
+        await this.sendRequest(connection, 'evidence/export', {
+          sessionId: terminalEvent.sessionId,
+          turnId: terminalEvent.turnId,
+          includeEvents: true,
+          includeArtifacts: true,
+          includeEvidencePack: true
+        })
+      ) as AppServerEvidenceExportResponse
+
+      await this.projectEvidenceExport(running, terminalEvent, exportResult)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'App Server evidence/export 失败。'
+      const failedExportEvent: AppServerAgentEvent = {
+        eventId: createId('evt'),
+        sequence: terminalEvent.sequence + 1,
+        sessionId: terminalEvent.sessionId,
+        threadId: terminalEvent.threadId,
+        turnId: terminalEvent.turnId,
+        type: 'evidence.export.failed',
+        timestamp: nowIso(),
+        payload: {
+          summary: message
+        }
+      }
+
+      this.recordDiagnostics(running, failedExportEvent)
+      await this.upsertRuntimeEvidence(running, failedExportEvent)
+      await this.appendFeedItem(running.task, failedExportEvent)
     }
   }
 
@@ -570,6 +945,152 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
       type: 'task.diagnostics',
       diagnostics
     })
+  }
+
+  private async projectHarnessEvent(running: RunningTask, event: AppServerAgentEvent): Promise<void> {
+    if (event.type === 'action.required') {
+      await this.upsertRuntimeAction(running, event)
+      return
+    }
+
+    if (event.type.includes('evidence')) {
+      await this.upsertRuntimeEvidence(running, event)
+      return
+    }
+
+    if (event.type.includes('artifact') || isTerminalSuccessEvent(event.type) || isTerminalFailureEvent(event.type)) {
+      await this.upsertRuntimeArtifact(running, event)
+    }
+  }
+
+  private async projectEvidenceExport(
+    running: RunningTask,
+    terminalEvent: AppServerAgentEvent,
+    exportResult: AppServerEvidenceExportResponse
+  ): Promise<void> {
+    const evidenceIds = getExportEvidenceIds(terminalEvent, exportResult)
+
+    if (exportResult.evidencePack) {
+      await this.upsertExportedEvidencePack(running, terminalEvent, exportResult.evidencePack)
+    }
+
+    if (exportResult.events?.length) {
+      await this.upsertExportedEventLog(running, terminalEvent, exportResult.events, exportResult.exportedAt)
+    }
+
+    for (const artifact of exportResult.artifacts ?? []) {
+      await this.upsertExportedArtifact(running, terminalEvent, artifact, evidenceIds)
+    }
+  }
+
+  private async upsertRuntimeAction(running: RunningTask, event: AppServerAgentEvent): Promise<void> {
+    const action: HarnessActionDto = {
+      actionId: resolveEventRefId(event, 'runtime_action'),
+      taskId: running.task.taskId,
+      actionType: 'create-change-set',
+      targetRef: buildTargetRef(running, event),
+      decision: 'requires-confirmation',
+      status: 'pending',
+      summary: summarizePayload(event.payload),
+      riskLevel: 'medium',
+      createdAt: event.timestamp
+    }
+
+    await this.getRepository().upsertHarnessAction(action)
+  }
+
+  private async upsertRuntimeArtifact(running: RunningTask, event: AppServerAgentEvent): Promise<void> {
+    const artifact: HarnessArtifactDto = {
+      artifactId: resolveEventRefId(event, 'runtime_artifact'),
+      taskId: running.task.taskId,
+      kind: resolveHarnessArtifactKind(event),
+      title: resolveEventTitle(event),
+      summary: summarizePayload(event.payload),
+      evidenceIds: [],
+      refId: event.eventId,
+      createdAt: event.timestamp
+    }
+
+    await this.getRepository().upsertHarnessArtifact(artifact)
+  }
+
+  private async upsertExportedArtifact(
+    running: RunningTask,
+    terminalEvent: AppServerAgentEvent,
+    artifactSummary: AppServerArtifactSummary,
+    evidenceIds: string[]
+  ): Promise<void> {
+    const artifactRef = artifactSummary.artifactRef ?? artifactSummary.artifactId ?? artifactSummary.eventId
+
+    if (!artifactRef) {
+      return
+    }
+
+    const artifact: HarnessArtifactDto = {
+      artifactId: sanitizeRuntimeId(`app_server_artifact_${terminalEvent.sessionId}_${artifactRef}`),
+      taskId: running.task.taskId,
+      kind: resolveHarnessArtifactKindValue(artifactSummary.kind, 'artifact.snapshot'),
+      title: artifactSummary.title ?? artifactSummary.artifactId ?? artifactSummary.artifactRef ?? 'App Server 产物',
+      summary: summarizeExportedArtifact(artifactSummary),
+      evidenceIds,
+      refId: artifactSummary.path ?? artifactSummary.artifactRef ?? artifactSummary.artifactId,
+      createdAt: terminalEvent.timestamp
+    }
+
+    await this.getRepository().upsertHarnessArtifact(artifact)
+  }
+
+  private async upsertRuntimeEvidence(running: RunningTask, event: AppServerAgentEvent): Promise<void> {
+    const evidence: HarnessEvidenceDto = {
+      evidenceId: resolveEventRefId(event, 'runtime_evidence'),
+      sourceRef: buildTargetRef(running, event),
+      summary: summarizePayload(event.payload),
+      locator: `app-server:${event.type}:${event.sequence}`,
+      excerpt: summarizePayload(event.payload).slice(0, 240),
+      createdAt: event.timestamp
+    }
+
+    await this.getRepository().upsertHarnessEvidence(evidence)
+  }
+
+  private async upsertExportedEvidencePack(
+    running: RunningTask,
+    terminalEvent: AppServerAgentEvent,
+    evidencePack: AppServerEvidencePackSummary
+  ): Promise<void> {
+    const root = evidencePack.packRelativeRoot ?? evidencePack.packAbsoluteRoot
+    const evidence: HarnessEvidenceDto = {
+      evidenceId: getExportEvidencePackId(terminalEvent),
+      sourceRef: buildTargetRef(running, terminalEvent),
+      summary: summarizeEvidencePack(evidencePack),
+      locator: root ? `app-server:evidence-pack:${root}` : `app-server:evidence-pack:${terminalEvent.sessionId}`,
+      excerpt: describeEvidencePackArtifacts(evidencePack).slice(0, 240),
+      createdAt: evidencePack.exportedAt ?? terminalEvent.timestamp
+    }
+
+    await this.getRepository().upsertHarnessEvidence(evidence)
+  }
+
+  private async upsertExportedEventLog(
+    running: RunningTask,
+    terminalEvent: AppServerAgentEvent,
+    events: AppServerAgentEvent[],
+    exportedAt?: string
+  ): Promise<void> {
+    const evidence: HarnessEvidenceDto = {
+      evidenceId: getExportEventLogEvidenceId(terminalEvent),
+      sourceRef: buildTargetRef(running, terminalEvent),
+      summary: summarizeExportedEvents(events),
+      locator: `app-server:event-log:${terminalEvent.sessionId}:${terminalEvent.turnId ?? 'turn'}`,
+      excerpt: events
+        .slice(0, 6)
+        .map((event) => `${event.sequence}:${event.type}:${summarizePayload(event.payload)}`)
+        .join('\n')
+        .slice(0, 240),
+      createdAt: exportedAt ?? terminalEvent.timestamp
+    }
+
+    await this.getRepository().upsertHarnessEvidence(evidence)
   }
 
   private async appendFeedItem(task: AgentTaskDto, event: AppServerAgentEvent): Promise<void> {
@@ -648,5 +1169,6 @@ export class LimeAppServerRuntime implements AgentRuntimePort {
 
 export const createLimeAppServerRuntime = (
   getRepository: () => ProjectRepositoryPort,
-  env?: NodeJS.ProcessEnv
-): LimeAppServerRuntime => new LimeAppServerRuntime(getRepository, env)
+  env?: NodeJS.ProcessEnv | RuntimeEnvResolver
+): LimeAppServerRuntime =>
+  new LimeAppServerRuntime(getRepository, typeof env === 'function' ? env : () => env ?? process.env)

@@ -183,8 +183,8 @@ const runtimeProviderDefinitions: Array<{
 }> = [
   {
     id: 'legacy',
-    label: '本地规则模式',
-    description: '不调用外部模型，继续使用当前仓库里的规则型收口与工作台回写。'
+    label: '未接入真实模型',
+    description: '不会执行需要 AI 的任务；写作生成、分析、同步和诊断不会使用本地规则兜底。'
   },
   {
     id: 'anthropic',
@@ -199,7 +199,7 @@ const runtimeProviderDefinitions: Array<{
 ]
 
 const runtimeProviderLabel: Record<AgentRuntimeSettingsStateDto['resolvedProvider'], string> = {
-  legacy: '本地规则模式',
+  legacy: '未接入真实模型',
   anthropic: 'Claude / Anthropic',
   'openai-compatible': 'OpenAI Compatible'
 }
@@ -215,7 +215,7 @@ const resolveRuntimeStatusLabel = (state?: AgentRuntimeSettingsStateDto): string
 }
 
 const runtimeTestProviderLabel: Record<AgentRuntimeConnectionTestResultDto['provider'], string> = {
-  legacy: '本地规则模式',
+  legacy: '未接入真实模型',
   anthropic: 'Claude / Anthropic',
   'openai-compatible': 'OpenAI Compatible'
 }
@@ -524,14 +524,14 @@ const isSameAgentRuntimeSettings = (
 }
 
 const resolveRuntimeModelPlaceholder = (provider: AgentRuntimeSettingsDto['provider']): string =>
-  provider === 'anthropic' ? '留空则默认 claude-sonnet-4-6' : provider === 'openai-compatible' ? '留空则默认 gpt-4.1-mini' : '本地规则模式不需要模型'
+  provider === 'anthropic' ? '留空则默认 claude-sonnet-4-6' : provider === 'openai-compatible' ? '留空则默认 gpt-4.1-mini' : '未接入真实模型时不需要填写'
 
 const resolveRuntimeBaseUrlPlaceholder = (provider: AgentRuntimeSettingsDto['provider']): string =>
   provider === 'anthropic'
     ? '留空则默认 https://api.anthropic.com/v1/messages'
     : provider === 'openai-compatible'
       ? '留空则默认 https://api.openai.com/v1'
-      : '本地规则模式不需要网关地址'
+      : '未接入真实模型时不需要填写'
 
 const AgentSidebarRailIcon = ({
   mode
@@ -1096,7 +1096,7 @@ const SettingsModal = ({
                 <div className="detail-list__item">
                   <strong>当前入口</strong>
                   <span className="settings-modal__path" title={agentSettingsState?.resolvedBaseUrl}>
-                    {agentSettingsState?.resolvedBaseUrl || '需要 LIME_APP_SERVER_BIN 与真实模型配置，或 LIME_APP_SERVER_BACKEND_COMMAND'}
+                    {agentSettingsState?.resolvedBaseUrl || '需要可发现的 App Server sidecar 与真实模型配置，或 LIME_APP_SERVER_BACKEND_COMMAND'}
                   </span>
                 </div>
               </div>
@@ -1206,7 +1206,7 @@ const SettingsModal = ({
                     <div className="detail-list__item">
                       <strong>入口</strong>
                       <span className="settings-modal__path" title={agentSettingsTestResult.baseUrl}>
-                        {agentSettingsTestResult.baseUrl || '本地规则模式无需网关地址'}
+                        {agentSettingsTestResult.baseUrl || '未接入真实模型时无需网关地址'}
                       </span>
                     </div>
                     {agentSettingsTestResult.stopReason ? (

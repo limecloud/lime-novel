@@ -286,6 +286,8 @@ input {
   flex-direction: column;
   gap: clamp(10px, 0.9vw, 16px);
   overflow: hidden;
+  app-region: drag;
+  -webkit-app-region: drag;
 }
 
 .novel-shell--writing {
@@ -301,6 +303,8 @@ input {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  app-region: drag;
+  -webkit-app-region: drag;
 }
 
 .topbar {
@@ -327,6 +331,14 @@ input {
 .topbar [role='button'],
 .topbar [role='tab'],
 .topbar [contenteditable='true'],
+.workspace-stage button,
+.workspace-stage a,
+.workspace-stage input,
+.workspace-stage textarea,
+.workspace-stage select,
+.workspace-stage [role='button'],
+.workspace-stage [role='tab'],
+.workspace-stage [contenteditable='true'],
 .loading-screen button,
 .loading-screen a,
 .loading-screen input,

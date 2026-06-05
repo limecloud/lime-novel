@@ -3424,6 +3424,18 @@ ${sourceContent.trim()}
     await this.writeHarnessArtifactJson(`revisions/harness/timeline-iterations/${iteration.iterationId}.json`, iteration)
   }
 
+  async upsertHarnessAction(action: HarnessActionDto): Promise<void> {
+    await this.upsertHarnessObject('harness-action', action.actionId, action, action.createdAt)
+  }
+
+  async upsertHarnessArtifact(artifact: HarnessArtifactDto): Promise<void> {
+    await this.upsertHarnessObject('harness-artifact', artifact.artifactId, artifact, artifact.createdAt)
+  }
+
+  async upsertHarnessEvidence(evidence: HarnessEvidenceDto): Promise<void> {
+    await this.upsertHarnessObject('harness-evidence', evidence.evidenceId, evidence, evidence.createdAt)
+  }
+
   async runHarnessCommand(input: HarnessCommandInputDto): Promise<HarnessCommandResultDto> {
     if (input.command === 'toggle-skill') {
       await this.setSkillEnabled(input.skillId, input.enabled)

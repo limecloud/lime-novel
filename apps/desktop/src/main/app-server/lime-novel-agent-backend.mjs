@@ -70,8 +70,12 @@ const resolveConfig = () => {
 
   const apiKey = process.env.LIME_NOVEL_AGENT_API_KEY?.trim()
 
-  if (!apiKey) {
+  if (!apiKey && provider === 'anthropic') {
     throw new Error('缺少 LIME_NOVEL_AGENT_API_KEY，无法执行真实模型 turn。')
+  }
+
+  if (!apiKey && provider === 'openai-compatible' && !process.env.LIME_NOVEL_AGENT_BASE_URL?.trim()) {
+    throw new Error('缺少 LIME_NOVEL_AGENT_API_KEY 或 LIME_NOVEL_AGENT_BASE_URL，无法执行真实模型 turn。')
   }
 
   return {
@@ -106,12 +110,17 @@ const buildSystemPrompt = () => [
 ].join('\n')
 
 const completeOpenAICompatible = async (config, text) => {
+  const headers = {
+    'content-type': 'application/json'
+  }
+
+  if (config.apiKey) {
+    headers.authorization = `Bearer ${config.apiKey}`
+  }
+
   const response = await fetch(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${config.apiKey}`,
-      'content-type': 'application/json'
-    },
+    headers,
     body: JSON.stringify({
       model: config.model,
       temperature: Number.isFinite(config.temperature) ? config.temperature : 0.2,

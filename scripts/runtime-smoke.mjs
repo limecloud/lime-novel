@@ -67,7 +67,7 @@ const findLatestProposal = async (repository: ReturnType<typeof createFileSystem
 const project = await createNovelProjectWorkspace(baseDir, {
   title: '运行时闭环测试',
   genre: '悬疑',
-  premise: '主角在雨夜发现钟楼钥匙会回应谎言。',
+  premise: '主角在雨夜发现钟楼钥匙会回应谎言，并牵出一桩犯罪与死亡谜案。',
   template: 'mystery'
 })
 let repository = createFileSystemNovelRepository(project.workspacePath)
@@ -97,6 +97,15 @@ await repository.saveChapterDocument({
 })
 const savedChapter = await repository.loadChapterDocument(chapterId)
 assert(savedChapter.content.includes('钥匙自己转了半圈'), '章节保存应真实写回正文文件。')
+await waitFor(async () => {
+  const nextShell = await repository.loadWorkspaceShell()
+  return nextShell.storyChangeEvents.some((event) => event.kind === 'chapter-saved' && event.sourceRef.refId === chapterId)
+}, '章节保存后应记录 chapter-saved 变更事件。')
+let harnessShell = await repository.loadWorkspaceShell()
+assert(harnessShell.storySyncRuns.some((run) => run.trigger === 'chapter-save'), '章节保存后应触发故事状态自动同步运行。')
+assert(harnessShell.storyContextBundles.some((bundle) => bundle.triggerEventId && bundle.sources.some((source) => source.kind === 'chapter')), '自动同步应生成章节上下文包。')
+assert(harnessShell.projections.some((projection) => projection.kind === 'story-state'), '自动同步应生成 renderer-facing 故事状态投影。')
+assert(harnessShell.protectionPoints.length > 0, '自动同步前应创建保护点。')
 
 await runtime.startTask({
   surface: 'writing',
@@ -173,6 +182,13 @@ await waitFor(async () => {
   return nextShell.readerFeedback.length > harnessBaseline.readerFeedback.length
 }, 'Harness 应生成并持久化读者反馈映射。')
 
+const feedbackCommandResult = await repository.runHarnessCommand({
+  command: 'import-reader-feedback',
+  comments: '读者说钥匙伏笔太晚才有用，担心前两章节奏拖慢。',
+  source: 'runtime-smoke-comments'
+})
+assert(feedbackCommandResult.changeSetId, '读者反馈导入命令应生成待确认变更包。')
+
 await runtime.startTask({
   surface: 'revision',
   intent: '发布后不要回改已发布章节，请做未来章节回潮和时间线迭代计划。',
@@ -196,6 +212,52 @@ const importedKnowledge = await repository.importKnowledgeDocument({
 })
 assert(existsSync(importedKnowledge.outputPath), '知识资料导入应写入 raw/research 文件。')
 assert(importedKnowledge.relativePath.startsWith('raw/research/'), '知识资料导入应归入 raw/research。')
+
+const skillBefore = (await repository.loadWorkspaceShell()).skillCatalog[0]
+assert(skillBefore, '项目应加载至少一个能力包。')
+await repository.runHarnessCommand({
+  command: 'toggle-skill',
+  skillId: skillBefore.skillId,
+  enabled: !skillBefore.enabled
+})
+const skillAfterToggle = (await repository.loadWorkspaceShell()).skillCatalog.find((skill) => skill.skillId === skillBefore.skillId)
+assert(skillAfterToggle?.enabled === !skillBefore.enabled, '能力包开关应写入 enabled-skills 状态。')
+await repository.runHarnessCommand({
+  command: 'toggle-skill',
+  skillId: skillBefore.skillId,
+  enabled: skillBefore.enabled
+})
+
+const riskResult = await repository.runHarnessCommand({
+  command: 'check-platform-risk',
+  chapterId,
+  platform: 'fanqie',
+  intent: '请按番茄口径检查发布风险，用于验证高风险导出阻断。'
+})
+assert(riskResult.changeSetId, '发布避雷检查应生成变更包。')
+harnessShell = await repository.loadWorkspaceShell()
+const openBlockingRisk = harnessShell.platformRisks.find((risk) => risk.status === 'open' && (risk.severity === 'high' || risk.severity === 'blocking'))
+assert(openBlockingRisk, '发布避雷检查应产生开放高风险或阻断风险。')
+assert(harnessShell.projections.some((projection) => projection.kind === 'publish-risk'), '发布避雷检查应生成发布风险投影。')
+await assertRejects(
+  () =>
+    repository.createExportPackage({
+      presetId: shell.exportPresets[0].presetId,
+      synopsis: '主角在雨夜发现钟楼钥匙会回应谎言，并被迫追查失踪者与城市沉默之间的关系。',
+      splitChapters: 3,
+      versionTag: 'v0.1.0-blocked',
+      notes: '这次导出应被开放高风险阻断。'
+    }),
+  '开放高风险发布风险应阻断导出。'
+)
+for (const risk of harnessShell.platformRisks.filter((item) => item.status === 'open' && (item.severity === 'high' || item.severity === 'blocking'))) {
+  await repository.runHarnessCommand({
+    command: 'update-platform-risk',
+    riskId: risk.riskId,
+    status: 'exempted',
+    reason: 'runtime smoke 验证作者豁免后允许导出。'
+  })
+}
 
 const exportResult = await repository.createExportPackage({
   presetId: shell.exportPresets[0].presetId,

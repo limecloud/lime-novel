@@ -69,7 +69,7 @@ const buildAgentRuntimeSettingsState = (
   let appServer: AgentRuntimeSettingsStateDto['appServer']
 
   try {
-    const appServerConfig = resolveAppServerRuntimeConfig()
+    const appServerConfig = resolveAppServerRuntimeConfig(toAgentRuntimeEnv(settings))
     appServer = {
       mode: 'external',
       binaryPath: appServerConfig.binaryPath,
@@ -102,14 +102,7 @@ const testAgentRuntimeSettingsConnection = async (
   const runtimeConfig = resolveAgentRuntimeConfig(toAgentRuntimeEnv(settings))
 
   if (runtimeConfig.provider === 'legacy') {
-    return {
-      mode: 'legacy',
-      provider: 'legacy',
-      model: '规则型本地收口',
-      baseUrl: '',
-      latencyMs: 0,
-      summary: '当前是本地规则模式，无需进行外部模型连接测试。'
-    }
+    throw new Error('请选择 Anthropic 或 OpenAI Compatible，并配置真实模型连接后再测试。')
   }
 
   const provider = createConfiguredLLMProvider({
@@ -160,7 +153,10 @@ export const createDesktopServices = async () => {
   })
   const workspaceStateStore = createWorkspaceStateStore(app.getPath('userData'), projectsRoot)
   let repository = createFileSystemNovelRepository(await workspaceStateStore.resolveInitialWorkspace())
-  const agentRuntime = createLimeAppServerRuntime(() => repository)
+  const agentRuntime = createLimeAppServerRuntime(
+    () => repository,
+    async () => toAgentRuntimeEnv(await agentRuntimeSettingsStore.load())
+  )
 
   const switchWorkspace = async (workspacePath: string) => {
     await access(join(workspacePath, 'novel.json'))

@@ -285,6 +285,11 @@ export const AgentSidebar = ({
   const dialogueTrace = diagnostics?.trace.filter((entry) => entry.role !== 'system') ?? []
 
   const handleSubmit = (): void => {
+    if (runtimeMode === 'legacy') {
+      onOpenSettings()
+      return
+    }
+
     if (!draft.trim()) {
       return
     }
@@ -488,11 +493,11 @@ export const AgentSidebar = ({
       ) : mode === 'dialogue' ? (
         <section className="agent-sidebar__composer">
           <article className={runtimeMode === 'live' ? 'agent-runtime-notice agent-runtime-notice--live' : 'agent-runtime-notice'}>
-            <strong>{runtimeMode === 'live' ? `当前已接入 ${runtimeLabel}` : '当前使用本地规则代理'}</strong>
+            <strong>{runtimeMode === 'live' ? `当前已接入 ${runtimeLabel}` : '真实 AI 运行服务未接入'}</strong>
             <p>
               {runtimeMode === 'live'
                 ? '新发起的对话会走真实模型链路；如果输出仍不对，优先查看“代理”页里的运行轨迹和工具事件。'
-                : '本地规则代理可以生成可回写提议、设定候选、修订问题和发布检查；接入模型后会升级为 live runtime。'}
+                : '写作生成、分析、同步和诊断不会走本地规则兜底；请先接入 Lime App Server external backend 和真实模型。'}
             </p>
             {runtimeMode === 'legacy' ? (
               <button type="button" className="ghost-button" onClick={onOpenSettings}>
@@ -516,14 +521,15 @@ export const AgentSidebar = ({
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            disabled={runtimeMode === 'legacy'}
             placeholder={
               runtimeMode === 'legacy'
-                ? '例如：检查当前章节视角泄露，并给一版最小修订方案。'
+                ? '接入真实 AI 运行服务后才能提交任务。'
                 : '例如：补一版更克制的身体反应，并限制在 120 字内。'
             }
           />
           <button className="primary-button" onClick={handleSubmit}>
-            {runtimeMode === 'legacy' ? '提交给规则代理' : '提交给当前代理'}
+            {runtimeMode === 'legacy' ? '先接入真实模型' : '提交给当前代理'}
           </button>
         </section>
       ) : null}

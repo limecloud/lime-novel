@@ -14,8 +14,11 @@ import type {
   DiagnosticReportDto,
   GenerateKnowledgeAnswerInputDto,
   GenerateKnowledgeAnswerResultDto,
+  HarnessActionDto,
+  HarnessArtifactDto,
   HarnessCommandInputDto,
   HarnessCommandResultDto,
+  HarnessEvidenceDto,
   ImpactAnalysisDto,
   ImportKnowledgeDocumentInputDto,
   ImportKnowledgeDocumentResultDto,
@@ -76,6 +79,9 @@ export interface ProjectRepositoryPort {
   upsertIntentPlan(plan: IntentPlanDto): Promise<void>
   upsertReaderFeedback(feedback: ReaderFeedbackDto): Promise<void>
   upsertTimelineIteration(iteration: TimelineIterationDto): Promise<void>
+  upsertHarnessAction(action: HarnessActionDto): Promise<void>
+  upsertHarnessArtifact(artifact: HarnessArtifactDto): Promise<void>
+  upsertHarnessEvidence(evidence: HarnessEvidenceDto): Promise<void>
   applyProposal(proposalId: string): Promise<ApplyProposalResultDto>
   rejectProposal(proposalId: string): Promise<RejectProposalResultDto>
   commitCanonCard(input: CommitCanonCardInputDto): Promise<CommitCanonCardResultDto>

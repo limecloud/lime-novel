@@ -28,7 +28,7 @@ import {
 import { limeNovelBrand } from './branding'
 
 const runtimeProviderLabel: Record<AgentRuntimeSettingsStateDto['resolvedProvider'], string> = {
-  legacy: '本地规则模式',
+  legacy: '未接入真实模型',
   anthropic: 'Claude / Anthropic',
   'openai-compatible': 'OpenAI Compatible'
 }
@@ -189,7 +189,7 @@ export const App = () => {
     agentFeedStore.addLocalStatus(
       title,
       agentRuntimeState?.mode === 'legacy'
-        ? '当前仍是本地规则模式，写作生成、分析、同步和诊断已禁止走 mock/harness 兜底。'
+        ? '当前未接入真实模型，写作生成、分析、同步和诊断已禁止走 mock/harness 兜底。'
         : 'AI Agent 设置尚未加载完成，暂时不能提交需要真实模型的任务。',
       '请在 AI Agent 设置中配置 Anthropic 或 OpenAI Compatible provider、模型和 API Key 后重试。'
     )
@@ -385,7 +385,7 @@ export const App = () => {
       agentFeedStore.addLocalStatus(
         'AI Agent 设置已保存',
         result.mode === 'legacy'
-          ? '尚未配置 Lime App Server external backend；写作生成、分析、同步和诊断不会走规则型兜底。'
+          ? '尚未配置 Lime App Server external backend；写作生成、分析、同步和诊断不会走本地兜底。'
           : `已接入 ${resolveRuntimeLabel(result)}，新发起的任务会使用 ${result.resolvedModel}。`,
         result.mode === 'legacy' ? '需要真实 AI 运行服务的任务会被阻止' : `${result.resolvedBaseUrl} · 新任务立即生效`
       )
