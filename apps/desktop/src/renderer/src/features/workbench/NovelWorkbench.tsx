@@ -200,6 +200,124 @@ const runtimeTestProviderLabel: Record<AgentRuntimeConnectionTestResultDto['prov
   'openai-compatible': 'OpenAI Compatible'
 }
 
+const activeTaskStatuses = new Set<AgentTaskDto['status']>(['queued', 'running', 'waiting_approval'])
+
+const resolveActiveWritingTask = (tasks: AgentTaskDto[]): AgentTaskDto | undefined => {
+  const writingTasks = tasks.filter((task) => task.surface === 'writing')
+
+  return writingTasks.find((task) => activeTaskStatuses.has(task.status)) ?? writingTasks[0]
+}
+
+const resolveTaskFeed = (feed: AgentFeedItemDto[], task?: AgentTaskDto): AgentFeedItemDto[] =>
+  task ? feed.filter((item) => item.taskId === task.taskId) : []
+
+const isPendingProposalItem = (item: AgentFeedItemDto): boolean =>
+  Boolean(item.proposalId) && item.approvalStatus !== 'accepted' && item.approvalStatus !== 'rejected'
+
+const isReviewFeedItem = (item: AgentFeedItemDto): boolean =>
+  isPendingProposalItem(item) || item.kind === 'issue' || item.kind === 'approval'
+
+const taskStatusLabel: Record<AgentTaskDto['status'], string> = {
+  queued: '排队中',
+  running: '运行中',
+  waiting_approval: '待确认',
+  completed: '完成',
+  failed: '失败'
+}
+
+type AgentRunStepState = 'waiting' | 'running' | 'done' | 'approval' | 'failed'
+
+const buildRunStepClassName = (state: AgentRunStepState): string => {
+  const baseClass = 'agent-writing-run-step'
+
+  if (state === 'waiting') {
+    return baseClass
+  }
+
+  return `${baseClass} ${baseClass}--${state}`
+}
+
+const buildWritingRunSteps = (
+  task: AgentTaskDto | undefined,
+  pendingProposalCount: number
+): Array<{
+  title: string
+  body: string
+  marker: string
+  label: string
+  state: AgentRunStepState
+}> => {
+  if (!task) {
+    return [
+      {
+        title: '等待作者意图',
+        body: '在下方输入框告诉 Agent 你想检查、改写或避雷的目标。',
+        marker: '1',
+        label: '未开始',
+        state: 'waiting'
+      },
+      {
+        title: '读取上下文资产',
+        body: '启动后会读取当前章、故事资产、人物线、伏笔线和平台规则。',
+        marker: '2',
+        label: '等待',
+        state: 'waiting'
+      },
+      {
+        title: '调用能力包',
+        body: '按任务需要调用人物线同步、伏笔线检查、发布避雷或修订检查。',
+        marker: '3',
+        label: '等待',
+        state: 'waiting'
+      },
+      {
+        title: '确认变更包',
+        body: '有改动时先生成待确认建议，再由你决定采纳或丢弃。',
+        marker: '4',
+        label: '等待',
+        state: 'waiting'
+      }
+    ]
+  }
+
+  const isQueued = task.status === 'queued'
+  const isRunning = task.status === 'running'
+  const isApproval = task.status === 'waiting_approval' || pendingProposalCount > 0
+  const isCompleted = task.status === 'completed'
+  const isFailed = task.status === 'failed'
+
+  return [
+    {
+      title: '接收作者意图',
+      body: task.summary,
+      marker: '✓',
+      label: '完成',
+      state: 'done'
+    },
+    {
+      title: '读取上下文资产',
+      body: '当前章、章节材料、故事资产、人物线、伏笔线和平台规则进入同一轮任务。',
+      marker: isQueued ? '…' : '✓',
+      label: isQueued ? '排队中' : '完成',
+      state: isQueued ? 'running' : 'done'
+    },
+    {
+      title: '调用能力包',
+      body: '按意图调用人物线同步、伏笔线检查、发布避雷或修订检查。',
+      marker: isFailed ? '!' : isCompleted || isApproval ? '✓' : '…',
+      label: isFailed ? '失败' : isCompleted || isApproval ? '完成' : '运行中',
+      state: isFailed ? 'failed' : isCompleted || isApproval ? 'done' : isRunning || isQueued ? 'running' : 'waiting'
+    },
+    {
+      title: '需要你确认',
+      body: '变更包确认后才会写回正文或故事资产。',
+      marker: isApproval ? '!' : isCompleted ? '✓' : '4',
+      label: isApproval ? `${Math.max(pendingProposalCount, 1)} 项` : isCompleted ? '完成' : taskStatusLabel[task.status],
+      state: isApproval ? 'approval' : isCompleted ? 'done' : isFailed ? 'failed' : 'waiting'
+    }
+  ]
+}
+
 const agentSidebarModeDefinitions: Array<{
   id: AgentSidebarMode
   label: string
@@ -219,6 +337,35 @@ const agentSidebarModeDefinitions: Array<{
     id: 'dialogue',
     label: '对话',
     description: '查看实时 trace，并继续发起对话。'
+  }
+]
+
+type WritingInspectorPane = 'state' | 'changes' | 'risk' | 'clock'
+
+const writingInspectorPaneDefinitions: Array<{
+  id: WritingInspectorPane
+  label: string
+  description: string
+}> = [
+  {
+    id: 'state',
+    label: '环境',
+    description: '查看当前章、运行模式和故事资产状态。'
+  },
+  {
+    id: 'changes',
+    label: '变更',
+    description: '查看待确认的正文或故事资产变更。'
+  },
+  {
+    id: 'risk',
+    label: '避雷',
+    description: '查看发布风险和平台规则建议。'
+  },
+  {
+    id: 'clock',
+    label: '时光机',
+    description: '查看最近保护点和可撤回范围。'
   }
 ]
 
@@ -294,6 +441,13 @@ const ExpandSidebarIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M7.25 5.5v13" {...iconStrokeProps} />
     <path d="M16.5 7.25 11.75 12l4.75 4.75" {...iconStrokeProps} />
+  </svg>
+)
+
+const CollapseSidebarIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M16.75 5.5v13" {...iconStrokeProps} />
+    <path d="M7.5 7.25 12.25 12 7.5 16.75" {...iconStrokeProps} />
   </svg>
 )
 
@@ -390,6 +544,97 @@ const AgentSidebarRail = ({
         >
           <span className="agent-sidebar-rail__icon">
             <AgentSidebarRailIcon mode={item.id} />
+          </span>
+        </button>
+      ))}
+    </div>
+  </aside>
+)
+
+const WritingInspectorPaneIcon = ({ pane }: { pane: WritingInspectorPane }) => {
+  if (pane === 'state') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="5.5" {...iconStrokeProps} />
+        <path d="M12 6.5v2.25" {...iconStrokeProps} />
+        <path d="M12 15.25v2.25" {...iconStrokeProps} />
+        <path d="M6.5 12h2.25" {...iconStrokeProps} />
+        <path d="M15.25 12h2.25" {...iconStrokeProps} />
+      </svg>
+    )
+  }
+
+  if (pane === 'changes') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M7 7.5h10" {...iconStrokeProps} />
+        <path d="M7 12h6.25" {...iconStrokeProps} />
+        <path d="M7 16.5h8.25" {...iconStrokeProps} />
+        <path d="M16.75 12 19 14.25l-2.25 2.25" {...iconStrokeProps} />
+      </svg>
+    )
+  }
+
+  if (pane === 'risk') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 5.75 18.75 18H5.25L12 5.75Z" {...iconStrokeProps} />
+        <path d="M12 10.25v3.25" {...iconStrokeProps} />
+        <path d="M12 16.25h.01" {...iconStrokeProps} />
+      </svg>
+    )
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="6.5" {...iconStrokeProps} />
+      <path d="M12 8.25V12l2.75 2" {...iconStrokeProps} />
+    </svg>
+  )
+}
+
+const WritingInspectorRail = ({
+  activePane,
+  onPaneChange,
+  onExpand
+}: {
+  activePane: WritingInspectorPane
+  onPaneChange: (pane: WritingInspectorPane) => void
+  onExpand: () => void
+}) => (
+  <aside className="writing-inspector-rail" aria-label="写作检查栏折叠导航">
+    <button
+      type="button"
+      className="writing-inspector-rail__button writing-inspector-rail__button--icon"
+      onClick={onExpand}
+      aria-label="展开写作检查栏"
+      title="展开写作检查栏"
+    >
+      <span className="writing-inspector-rail__icon">
+        <ExpandSidebarIcon />
+      </span>
+    </button>
+
+    <div className="writing-inspector-rail__modes">
+      {writingInspectorPaneDefinitions.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={
+            item.id === activePane
+              ? 'writing-inspector-rail__button writing-inspector-rail__button--active'
+              : 'writing-inspector-rail__button'
+          }
+          aria-label={`${item.label}，${item.description}`}
+          title={`${item.label} · ${item.description}`}
+          aria-pressed={item.id === activePane}
+          onClick={() => {
+            onPaneChange(item.id)
+            onExpand()
+          }}
+        >
+          <span className="writing-inspector-rail__icon">
+            <WritingInspectorPaneIcon pane={item.id} />
           </span>
         </button>
       ))}
@@ -1088,25 +1333,40 @@ const HomeSurface = ({
 const WritingSurface = ({
   shell,
   chapterDocument,
-  selectedSceneId,
-  onSelectScene,
+  renderedChapter,
+  selectedScene,
+  feedState,
+  activityLabel,
+  runtimeLabel,
+  onSelectChapter,
   onStartTask,
+  onApplyProposal,
+  onRejectProposal,
   onSaveChapter
 }: {
   shell: WorkspaceShellDto
   chapterDocument?: ChapterDocumentDto
-  selectedSceneId?: string
-  onSelectScene: (sceneId: string) => void
+  renderedChapter?: ChapterListItemDto
+  selectedScene?: WorkspaceShellDto['sceneList'][number]
+  feedState: AgentFeedSnapshot
+  activityLabel: string
+  runtimeLabel: string
+  onSelectChapter: (chapterId: string) => void
   onStartTask: (intent: string) => void
+  onApplyProposal: (proposalId: string) => void
+  onRejectProposal: (proposalId: string) => void
   onSaveChapter: (chapterId: string, content: string) => void
 }) => {
   const [draftContent, setDraftContent] = useState(chapterDocument?.content ?? '')
-  const [isStageMetaExpanded, setIsStageMetaExpanded] = useState(false)
-  const [isCanvasHeaderExpanded, setIsCanvasHeaderExpanded] = useState(false)
-  const [isSelectionTrayExpanded, setIsSelectionTrayExpanded] = useState(false)
-  const [isInsightDockExpanded, setIsInsightDockExpanded] = useState(false)
-  const paragraphs = excerptParagraphs(chapterDocument?.content)
-  const selectedScene = shell.sceneList.find((scene) => scene.sceneId === selectedSceneId) ?? shell.sceneList[0]
+  const [intentDraft, setIntentDraft] = useState('帮我检查这一章是否需要提前补强反转依据。')
+  const [isEditorOpen, setEditorOpen] = useState(false)
+  const [isPreviewVisible, setPreviewVisible] = useState(true)
+  const latestTask = resolveActiveWritingTask(feedState.tasks)
+  const taskFeed = resolveTaskFeed(feedState.feed, latestTask)
+  const visibleProposals = taskFeed.filter(isReviewFeedItem).slice(0, 4)
+  const pendingProposals = taskFeed.filter(isPendingProposalItem)
+  const proposalCount = pendingProposals.length
+  const runSteps = buildWritingRunSteps(latestTask, proposalCount)
 
   useEffect(() => {
     setDraftContent(chapterDocument?.content ?? '')
@@ -1122,12 +1382,22 @@ const WritingSurface = ({
   }
 
   const isDirty = draftContent !== chapterDocument.content
-  const selectedSceneGoal = selectedScene?.goal ?? chapterDocument.objective
   const isReadOnlyByTimeline = shell.project.lockedChapterRefs.includes(chapterDocument.chapterId)
-  const chapterHarnessFindings = shell.diagnosticReports
-    .flatMap((report) => report.findings)
-    .filter((finding) => finding.targetRefs.includes(chapterDocument.chapterId))
-    .slice(0, 2)
+  const previewChapter = renderedChapter ?? shell.chapterTree.find((chapter) => chapter.chapterId === chapterDocument.chapterId)
+  const isPreviewingCurrentChapter = previewChapter?.chapterId === chapterDocument.chapterId
+  const previewParagraphs = isPreviewingCurrentChapter
+    ? excerptParagraphs(chapterDocument.content)
+    : excerptParagraphs(previewChapter?.summary)
+  const handleSubmitIntent = (): void => {
+    const intent = intentDraft.trim()
+
+    if (!intent) {
+      return
+    }
+
+    onStartTask(intent)
+    setIntentDraft('')
+  }
   const handleSave = (): void => {
     if (isReadOnlyByTimeline) {
       return
@@ -1137,248 +1407,210 @@ const WritingSurface = ({
   }
 
   return (
-    <div className="writing-stage">
-      <section className="writing-stage__meta">
-        <div className="writing-stage__meta-strip">
-          <div className="writing-stage__title">
-            <span className="eyebrow">正文主舞台</span>
-            <h1>{chapterDocument.title}</h1>
-          </div>
-          <div className="writing-stage__meta-actions">
-            <div className="writing-stage__stats">
-              <span>视角：林清远</span>
-              <span>场景：{selectedScene?.title ?? '当前场景'}</span>
-              <span>{chapterDocument.lastEditedAt}</span>
-              <span>{formatCount(chapterDocument.wordCount)} 字</span>
-              <span>{isReadOnlyByTimeline ? 'Timeline 只读' : shell.project.lifecycleMode}</span>
-              <span>{isDirty ? '有未保存更改' : '已同步到本地项目'}</span>
-            </div>
-            <button
-              type="button"
-              className="writing-mini-button"
-              aria-expanded={isStageMetaExpanded}
-              onClick={() => setIsStageMetaExpanded((value) => !value)}
-            >
-              {isStageMetaExpanded ? '收起章节信息' : '章节信息'}
-            </button>
-          </div>
+    <div className="agent-writing-stage">
+      <header className="agent-writing-header">
+        <div className="agent-writing-header__title">
+          <h1>{latestTask?.title ?? `${chapterDocument.title} 的 Agent 任务`}</h1>
+          <span>
+            Agent 正在围绕《{chapterDocument.title}》读取章节材料、{selectedScene?.title ?? '故事资产'}、人物线、伏笔线、发布规则和启用能力包
+          </span>
         </div>
-        {isStageMetaExpanded ? (
-          <div className="writing-stage__meta-panel">
-            <div className="detail-list detail-list--compact">
-              <div className="detail-list__item">
-                <strong>章节目标</strong>
-                <span>{chapterDocument.objective}</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>当前场景</strong>
-                <span>{selectedScene?.title ?? '正文全章'}</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>当前聚焦</strong>
-                <span>{selectedSceneGoal}</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>Harness 约束</strong>
-                <span>
-                  {isReadOnlyByTimeline
-                    ? '本章已发布，只能作为只读历史；修复应转为未来章节补强。'
-                    : chapterHarnessFindings[0]?.recommendation ?? shell.harnessProfile.constraints[0]}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="writing-canvas">
-        <div className="writing-canvas__header">
-          <div className="writing-canvas__status-strip">
-            <span className="status-chip status-chip--muted status-chip--slim">
-              当前选区 · {selectedScene?.title ?? '正文全章'}
-            </span>
-            <span className="writing-canvas__summary-text">{selectedSceneGoal}</span>
-          </div>
-          <div className="writing-canvas__header-actions">
-            <button
-              type="button"
-              className="writing-mini-button writing-mini-button--primary"
-              onClick={handleSave}
-              disabled={isReadOnlyByTimeline}
-            >
-              {isReadOnlyByTimeline ? '已发布只读' : '保存'}
-            </button>
-            <button
-              type="button"
-              className="writing-mini-button"
-              onClick={() => onStartTask('请基于当前章节目标继续写下一段。')}
-            >
-              续写
-            </button>
-            <button
-              type="button"
-              className="writing-mini-button"
-              aria-expanded={isCanvasHeaderExpanded}
-              onClick={() => setIsCanvasHeaderExpanded((value) => !value)}
-            >
-              {isCanvasHeaderExpanded ? '收起工作条' : '展开工作条'}
-            </button>
-          </div>
-        </div>
-        {isCanvasHeaderExpanded ? (
-          <div className="writing-canvas__header-panel">
-            <div className="writing-canvas__status">
-              <span className="status-chip status-chip--muted status-chip--slim">视角：林清远</span>
-              <span className="status-chip status-chip--slim">{shell.sceneList.length} 个场景</span>
-              <span className="status-chip status-chip--muted status-chip--slim">
-                {isDirty ? '有未保存更改' : '正文已保存'}
-              </span>
-              <span className="status-chip status-chip--muted status-chip--slim">
-                {isReadOnlyByTimeline ? 'timeline 只读' : 'sandbox 可改'}
-              </span>
-            </div>
-            <div className="detail-list detail-list--compact">
-              <div className="detail-list__item">
-                <strong>章节目标</strong>
-                <span>{chapterDocument.objective}</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>最后编辑</strong>
-                <span>{chapterDocument.lastEditedAt}</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>当前字数</strong>
-                <span>{formatCount(chapterDocument.wordCount)} 字</span>
-              </div>
-              <div className="detail-list__item">
-                <strong>当前 Harness</strong>
-                <span>
-                  {chapterHarnessFindings.length > 0
-                    ? chapterHarnessFindings.map((finding) => `${finding.area}：${finding.recommendation}`).join(' / ')
-                    : '暂无本章体检 finding，可从修订工作面发起小说体检。'}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        <ChapterEditor content={draftContent} onChange={setDraftContent} onSave={handleSave} />
-
-        <div className="writing-canvas__footer">
-          <button
-            type="button"
-            className="writing-canvas__footer-toggle"
-            aria-expanded={isSelectionTrayExpanded}
-            onClick={() => setIsSelectionTrayExpanded((value) => !value)}
-          >
-            <div className="writing-canvas__footer-brief">
-              <span className="eyebrow">选区与操作</span>
-              <strong>{selectedScene?.title ?? '正文全章'}</strong>
-              <span>{selectedSceneGoal}</span>
-            </div>
-            <span className="writing-canvas__footer-hint">{isSelectionTrayExpanded ? '收起' : '展开'}</span>
+        <div className="agent-writing-header__actions">
+          <button type="button" className="writing-mini-button" onClick={() => onStartTask('请检查当前章会牵动哪些人物线、伏笔线和后文反转。')}>
+            牵动范围
           </button>
-          {isSelectionTrayExpanded ? (
-            <div className="writing-canvas__footer-panel">
-              <div className="writing-canvas__selection">
-                <span className="eyebrow">当前选区</span>
-                <strong>{selectedScene?.title ?? '楼梯口的迟疑'}</strong>
-                <p>{selectedSceneGoal}</p>
-              </div>
-              <div className="writing-canvas__scene-switcher">
-                {shell.sceneList.map((scene) => (
-                  <button
-                    key={scene.sceneId}
-                    type="button"
-                    className={
-                      scene.sceneId === selectedScene?.sceneId
-                        ? 'writing-chip-button writing-chip-button--active'
-                        : 'writing-chip-button'
-                    }
-                    onClick={() => onSelectScene(scene.sceneId)}
-                  >
-                    {scene.title}
-                  </button>
-                ))}
-              </div>
-              <div className="writing-canvas__secondary-actions">
-                <button
-                  type="button"
-                  className="writing-chip-button"
-                  onClick={() => onStartTask('请把当前开头改得更克制、更有压迫感。')}
-                >
-                  改写当前开头
-                </button>
-                <button
-                  type="button"
-                  className="writing-chip-button"
-                  onClick={() => onStartTask('请检查本章是否有视角越界，并给出证据。')}
-                >
-                  检查视角
-                </button>
-                <button
-                  type="button"
-                  className="writing-chip-button"
-                  onClick={() => onStartTask('请把当前段落可提炼的物件与规则沉淀成设定卡。')}
-                >
-                  沉淀设定
-                </button>
-              </div>
+          <button type="button" className="writing-mini-button" onClick={() => onStartTask('请按目标平台检查这一章发布风险，只给建议，不直接改正文。')}>
+            发布避雷
+          </button>
+          <button type="button" className="writing-mini-button writing-mini-button--primary" onClick={() => onStartTask('请生成一个待确认变更包，包含牵动范围、改动对照和可撤回范围。')}>
+            {proposalCount > 0 ? `${proposalCount} 项待确认` : '生成变更包'}
+          </button>
+        </div>
+      </header>
+
+      <section className="agent-writing-feed" aria-label="AI Agent 主线程">
+        <div className="agent-writing-feed__inner">
+          <div className="agent-writing-run-meta">
+            <span>{activityLabel}</span>
+          </div>
+
+          <article className="agent-writing-intent-card">
+            <header>
+              <strong>作者意图</strong>
+              <span className="status-chip status-chip--slim">主输入</span>
+            </header>
+            <p>{latestTask?.summary ?? `帮我看《${chapterDocument.title}》会不会牵动后面反转，不要直接改正文，先给我一个可确认的变更包。`}</p>
+          </article>
+
+          <article className="agent-writing-card">
+            <header>
+              <strong>Lime Agent</strong>
+              <span className="status-chip status-chip--slim">{runtimeLabel}</span>
+            </header>
+            <p>我会先保护当前状态，再读取相关材料。正文、人物线、伏笔线、发布避雷都会进入同一个试改版本，等待你确认后才落地。</p>
+            <div className="agent-writing-capsules">
+              <span className="memory-chip">{chapterDocument.title}</span>
+              <span className="memory-chip">渲染：{previewChapter?.title ?? '当前章'}</span>
+              <span className="memory-chip">{selectedScene?.title ?? '故事资产'}</span>
+              <span className="memory-chip">人物线</span>
+              <span className="memory-chip">伏笔线</span>
+              <span className="memory-chip">发布避雷</span>
+              <span className="memory-chip">能力包</span>
             </div>
-          ) : null}
+            <div className="agent-writing-plan">
+              <div><b>1. 读材料</b><span>当前章、章节材料、人物线、伏笔线。</span></div>
+              <div><b>2. 找牵动</b><span>判断本章变化会影响哪些后文和故事资产。</span></div>
+              <div><b>3. 出变更包</b><span>只生成待确认建议，不直接覆盖正文。</span></div>
+            </div>
+          </article>
+
+          <article className="agent-writing-card">
+            <header>
+              <strong>运行记录</strong>
+              <span className="status-chip status-chip--slim status-chip--muted">
+                {latestTask ? taskStatusLabel[latestTask.status] : '等待意图'}
+              </span>
+            </header>
+            <div className="agent-writing-run-steps">
+              {runSteps.map((step) => (
+                <div key={step.title} className={buildRunStepClassName(step.state)}>
+                  <i>{step.marker}</i>
+                  <div><b>{step.title}</b><span>{step.body}</span></div>
+                  <small>{step.label}</small>
+                </div>
+              ))}
+            </div>
+            <div className="agent-writing-card__actions">
+              <button type="button" className="primary-button" onClick={() => onStartTask('请生成一个变更包，包含正文改动、牵动范围和可撤回范围。')}>
+                生成变更包
+              </button>
+              <button type="button" className="ghost-button" onClick={() => onStartTask('先不改正文，只解释当前章会牵动哪些后文资产。')}>
+                只解释牵动
+              </button>
+            </div>
+          </article>
+
+          {isPreviewVisible ? (
+            <article className="agent-writing-render-card">
+              <header>
+                <strong>{previewChapter ? `第 ${previewChapter.order} 章 ${previewChapter.title}` : chapterDocument.title}</strong>
+                <div className="agent-writing-card__actions">
+                  {isPreviewingCurrentChapter ? (
+                    <button type="button" className="ghost-button" onClick={() => setEditorOpen((value) => !value)}>
+                      {isEditorOpen ? '收起编辑' : '打开编辑'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => previewChapter && onSelectChapter(previewChapter.chapterId)}
+                    >
+                      设为当前写作章
+                    </button>
+                  )}
+                  <button type="button" className="ghost-button" onClick={() => setPreviewVisible(false)}>
+                    收起
+                  </button>
+                </div>
+              </header>
+              {isPreviewingCurrentChapter && isEditorOpen ? (
+                <div className="agent-writing-editor-frame">
+                  <ChapterEditor content={draftContent} onChange={setDraftContent} onSave={handleSave} />
+                  <div className="agent-writing-editor-actions">
+                    <span>{isDirty ? '有未保存更改' : '正文已保存'}</span>
+                    <button type="button" className="primary-button" onClick={handleSave} disabled={isReadOnlyByTimeline}>
+                      {isReadOnlyByTimeline ? '已发布只读' : '保存正文'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="agent-writing-render-body">
+                  {(previewParagraphs.length > 0 ? previewParagraphs : [chapterDocument.content]).slice(0, 6).map((paragraph) => (
+                    <p key={paragraph}>{paragraph}</p>
+                  ))}
+                  {!isPreviewingCurrentChapter ? (
+                    <p className="agent-writing-render-note">
+                      这是章节材料预览，尚未切换当前 Agent 主线程。需要让 Agent 围绕本章工作时，可设为当前写作章。
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </article>
+          ) : (
+            <button type="button" className="agent-writing-open-preview" onClick={() => setPreviewVisible(true)}>
+              打开章节渲染 · {previewChapter?.title ?? chapterDocument.title}
+            </button>
+          )}
+
+          <article className="agent-writing-change-dock">
+            <header>
+              <strong>变更审阅</strong>
+              <span className="status-chip status-chip--slim">{proposalCount > 0 ? `${proposalCount} 项待确认` : '等待变更包'}</span>
+            </header>
+            {visibleProposals.length > 0 ? (
+              visibleProposals.map((item) => (
+                <div key={item.itemId} className="agent-writing-review-row">
+                  <div>
+                    <b>{item.title}</b>
+                    <span>{item.body}</span>
+                  </div>
+                  {item.proposalId ? (
+                    <div className="agent-writing-card__actions">
+                      <button type="button" className="primary-button" onClick={() => onApplyProposal(item.proposalId as string)}>
+                        采纳
+                      </button>
+                      <button type="button" className="ghost-button" onClick={() => onRejectProposal(item.proposalId as string)}>
+                        丢弃
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="status-chip status-chip--slim status-chip--muted">{item.kind}</span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <>
+                <div className="agent-writing-review-row">
+                  <div><b>《{chapterDocument.title}》牵动范围</b><span>等待 Agent 生成正文、人物线、伏笔线的变更包。</span></div>
+                  <button type="button" className="ghost-button" onClick={() => onStartTask('请生成当前章的牵动范围变更包。')}>查看</button>
+                </div>
+                <div className="agent-writing-review-row">
+                  <div><b>发布避雷建议</b><span>平台规则包读取后，会在这里显示可确认建议。</span></div>
+                  <button type="button" className="ghost-button" onClick={() => onStartTask('请生成当前章的发布避雷建议。')}>查看</button>
+                </div>
+              </>
+            )}
+          </article>
         </div>
       </section>
 
-      <div className="writing-dock">
-        <button
-          type="button"
-          className="writing-dock__toggle"
-          aria-expanded={isInsightDockExpanded}
-          onClick={() => setIsInsightDockExpanded((value) => !value)}
-        >
-          <div className="writing-dock__brief">
-            <span className="eyebrow">记忆抽屉</span>
-            <strong>段落脉搏与章节记忆</strong>
-            <span>{selectedSceneGoal}</span>
+      <div className="agent-writing-composer-dock">
+        <div className="agent-writing-composer">
+          <textarea
+            value={intentDraft}
+            onChange={(event) => setIntentDraft(event.target.value)}
+            placeholder="直接告诉 Agent 你想做什么，例如：检查这一章会牵动哪些后文，不要直接改正文。"
+          />
+          <div className="agent-writing-composer__actions">
+            <div className="agent-writing-prompt-row">
+              <button type="button" className="writing-chip-button" onClick={() => setIntentDraft('帮我检查这一章会牵动哪些人物线和伏笔线。')}>
+                牵动范围
+              </button>
+              <button type="button" className="writing-chip-button" onClick={() => setIntentDraft('按目标平台检查这一章发布风险，只给建议，不直接改正文。')}>
+                发布避雷
+              </button>
+              <button type="button" className="writing-chip-button" onClick={() => setIntentDraft('把主角目标写得更强，但先生成变更包让我确认。')}>
+                人物动机
+              </button>
+              <button type="button" className="writing-chip-button" onClick={() => setIntentDraft('检查当前伏笔是否接近回收，给我下一章建议。')}>
+                伏笔线
+              </button>
+            </div>
+            <button type="button" className="primary-button" onClick={handleSubmitIntent}>
+              发送
+            </button>
           </div>
-          <span className="writing-canvas__footer-hint">{isInsightDockExpanded ? '收起' : '展开'}</span>
-        </button>
-        {isInsightDockExpanded ? (
-          <div className="surface-grid surface-grid--two">
-            <article className="surface-card surface-card--compact">
-              <div className="surface-card__header">
-                <span className="eyebrow">当前段落脉搏</span>
-                <span className="status-chip status-chip--slim">正文选区</span>
-              </div>
-              <div className="serif-snippets">
-                {paragraphs.slice(0, 2).map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-              </div>
-            </article>
-
-            <article className="surface-card surface-card--compact">
-              <div className="surface-card__header">
-                <span className="eyebrow">章节记忆</span>
-                <span className="status-chip status-chip--muted status-chip--slim">本轮引用</span>
-              </div>
-              <div className="detail-list">
-                <div className="detail-list__item">
-                  <strong>场景目标</strong>
-                  <span>{selectedSceneGoal}</span>
-                </div>
-                <div className="detail-list__item">
-                  <strong>人物风险</strong>
-                  <span>钟声与高处会触发明显压抑反应，不应写得过于平静。</span>
-                </div>
-                <div className="detail-list__item">
-                  <strong>待回收伏笔</strong>
-                  <span>旧铜味、钟楼钥匙、父亲失踪的沉默结构。</span>
-                </div>
-              </div>
-            </article>
-          </div>
-        ) : null}
+        </div>
       </div>
     </div>
   )
@@ -1461,42 +1693,68 @@ const HomeStructurePanel = ({
 const WritingStructurePanel = ({
   shell,
   chapterId,
+  renderedChapterId,
   selectedSceneId,
-  onSelectChapter,
+  onPreviewChapter,
   onSelectScene,
   onStartTask
 }: {
   shell: WorkspaceShellDto
   chapterId?: string
+  renderedChapterId?: string
   selectedSceneId?: string
-  onSelectChapter: (chapterId: string) => void
+  onPreviewChapter: (chapterId: string) => void
   onSelectScene: (sceneId: string) => void
   onStartTask: (intent: string) => void
 }) => (
   <div className="structure-panel__content">
     <div className="structure-panel__section">
-      <span className="eyebrow">章节结构</span>
-      <button className="structure-button structure-button--primary" onClick={() => onStartTask('请按当前卷册节奏，给我生成下一章提纲。')}>
-        + 新建章节
+      <div className="side-head">
+        <h3>新对话</h3>
+        <button className="ghost-button" onClick={() => onStartTask('请新建一个写作意图，并先读取当前小说上下文资产。')}>
+          ＋
+        </button>
+      </div>
+      <button className="panel-list-button panel-list-button--active" onClick={() => onStartTask('请检查当前章伏笔会牵动哪里。')}>
+        <strong>伏笔会牵动哪里</strong>
+        <span>刚刚 · Agent 主线程</span>
+      </button>
+      <button className="panel-list-button" onClick={() => onStartTask('请按目标平台检查当前章发布风险。')}>
+        <strong>当前章发布避雷</strong>
+        <span>12 分 · 只给建议</span>
+      </button>
+      <button className="panel-list-button" onClick={() => onStartTask('请补强人物动机，但先生成变更包。')}>
+        <strong>人物动机补强</strong>
+        <span>1 小时 · 待确认</span>
       </button>
     </div>
 
     <div className="structure-panel__section">
-      <span className="eyebrow">{shell.chapterTree[0]?.volumeLabel ?? '当前卷册'}</span>
+      <div className="side-head">
+        <h3>章节材料</h3>
+        <small>点击渲染</small>
+      </div>
       {shell.chapterTree.map((chapter) => (
         <button
           key={chapter.chapterId}
-          className={chapter.chapterId === chapterId ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
-          onClick={() => onSelectChapter(chapter.chapterId)}
+          className={chapter.chapterId === renderedChapterId ? 'panel-list-button panel-list-button--active' : 'panel-list-button'}
+          onClick={() => onPreviewChapter(chapter.chapterId)}
         >
           <strong>{`第 ${chapter.order} 章 ${chapter.title}`}</strong>
-          <span>{chapterStatusLabel[chapter.status]} · {formatCount(chapter.wordCount)} 字</span>
+          <span>
+            {chapterStatusLabel[chapter.status]} · {formatCount(chapter.wordCount)} 字
+            {chapter.chapterId === chapterId ? ' · 当前写作章' : ''}
+            {chapter.chapterId === renderedChapterId && chapter.chapterId !== chapterId ? ' · 正在渲染' : ''}
+          </span>
         </button>
       ))}
     </div>
 
     <div className="structure-panel__section">
-      <span className="eyebrow">本章状态</span>
+      <div className="side-head">
+        <h3>故事资产</h3>
+        <small>Agent 可读取</small>
+      </div>
       {shell.sceneList.map((scene) => (
         <button
           key={scene.sceneId}
@@ -1508,8 +1766,246 @@ const WritingStructurePanel = ({
         </button>
       ))}
     </div>
+
+    <div className="structure-panel__section">
+      <div className="side-head">
+        <h3>能力包</h3>
+        <small>项目启用</small>
+      </div>
+      <div className="agent-writing-capsules">
+        <span className="memory-chip">人物线同步</span>
+        <span className="memory-chip">伏笔线检查</span>
+        <span className="memory-chip">发布避雷</span>
+        <span className="memory-chip">修订检查</span>
+      </div>
+    </div>
   </div>
 )
+
+const AgentWritingInspector = ({
+  shell,
+  chapterDocument,
+  renderedChapter,
+  selectedScene,
+  feedState,
+  runtimeLabel,
+  activePane,
+  onPaneChange,
+  onCollapse,
+  onStartTask,
+  onApplyProposal,
+  onRejectProposal
+}: {
+  shell: WorkspaceShellDto
+  chapterDocument?: ChapterDocumentDto
+  renderedChapter?: ChapterListItemDto
+  selectedScene?: WorkspaceShellDto['sceneList'][number]
+  feedState: AgentFeedSnapshot
+  runtimeLabel: string
+  activePane: WritingInspectorPane
+  onPaneChange: (pane: WritingInspectorPane) => void
+  onCollapse: () => void
+  onStartTask: (intent: string) => void
+  onApplyProposal: (proposalId: string) => void
+  onRejectProposal: (proposalId: string) => void
+}) => {
+  const latestTask = resolveActiveWritingTask(feedState.tasks)
+  const taskFeed = resolveTaskFeed(feedState.feed, latestTask)
+  const pendingItems = taskFeed.filter(isPendingProposalItem)
+  const latestRecord =
+    shell.revisionRecords.find((record) => record.chapterId === chapterDocument?.chapterId) ?? shell.revisionRecords[0]
+  const publishingFinding = shell.diagnosticReports
+    .flatMap((report) => report.findings)
+    .find(
+      (finding) =>
+        (finding.area === 'publishing' || finding.area === 'reader-risk') &&
+        (!chapterDocument || finding.targetRefs.includes(chapterDocument.chapterId))
+    )
+  const latestPublishFeedback = shell.latestExportComparison?.addedFeedback[0] ?? shell.recentExports[0]?.platformFeedback[0]
+  const publishRiskLabel = publishingFinding ? `${publishingFinding.severity} 风险` : '待检查'
+
+  return (
+    <aside className="agent-writing-inspector">
+      <nav className="agent-writing-tabs" aria-label="右侧面板">
+        {writingInspectorPaneDefinitions.map((item) => (
+          <button
+            key={item.id}
+            className={activePane === item.id ? 'is-active' : ''}
+            onClick={() => onPaneChange(item.id)}
+            title={item.description}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+        <button
+          className="agent-writing-tabs__collapse"
+          onClick={onCollapse}
+          type="button"
+          aria-label="折叠写作检查栏"
+          title="折叠写作检查栏"
+        >
+          <span className="agent-writing-tabs__collapse-icon">
+            <CollapseSidebarIcon />
+          </span>
+        </button>
+      </nav>
+
+      <div className="agent-writing-inspector__body">
+        {activePane === 'state' ? (
+          <>
+            <section className="agent-writing-panel">
+              <h3>环境信息</h3>
+              <div className="agent-writing-context-row"><span>◎</span><b>变更</b><small>{pendingItems.length} 待确认</small></div>
+              <div className="agent-writing-context-row"><span>▣</span><b>本地</b><small>{shell.project.lifecycleMode}</small></div>
+              <div className="agent-writing-context-row"><span>◇</span><b>当前章</b><small>{chapterDocument?.title ?? '加载中'}</small></div>
+              <div className="agent-writing-context-row"><span>□</span><b>渲染</b><small>{renderedChapter?.title ?? chapterDocument?.title ?? '当前章'}</small></div>
+              <div className="agent-writing-context-row"><span>✦</span><b>故事资产</b><small>{selectedScene?.title ?? '未选择'}</small></div>
+              <div className="agent-writing-context-row"><span>☰</span><b>Lime App Server</b><small>{runtimeLabel}</small></div>
+            </section>
+
+            <section className="agent-writing-panel">
+              <h3>当前章态势 <span className="status-chip status-chip--slim">可继续写</span></h3>
+              <p>{chapterDocument?.objective ?? shell.project.premise}</p>
+              <div className="agent-writing-capsules">
+                <span className="memory-chip">{selectedScene ? sceneStatusLabel[selectedScene.status] : '故事资产待选'}</span>
+                <span className="memory-chip">反转依据待补强</span>
+              </div>
+            </section>
+
+            {selectedScene ? (
+              <section className="agent-writing-panel">
+                <h3>选中故事资产</h3>
+                <div className="agent-writing-line-item">
+                  <header><strong>{selectedScene.title}</strong><small>{sceneStatusLabel[selectedScene.status]}</small></header>
+                  <p>{selectedScene.goal}</p>
+                </div>
+              </section>
+            ) : null}
+
+            <section className="agent-writing-panel">
+              <h3>人物线</h3>
+              {shell.canonCandidates.slice(0, 2).map((card) => (
+                <div key={card.cardId} className="agent-writing-line-item">
+                  <header><strong>{card.name}</strong><small>{card.visibility}</small></header>
+                  <p>{card.summary}</p>
+                </div>
+              ))}
+            </section>
+
+            <section className="agent-writing-panel">
+              <h3>伏笔线</h3>
+              <div className="agent-writing-progress-steps">
+                <span className="is-active">埋下</span>
+                <span className="is-active">加深</span>
+                <span className="is-active">接近回收</span>
+                <span>回收</span>
+              </div>
+              <p>建议先让 Agent 读取后续章纲，再决定是否生成后文补强变更包。</p>
+            </section>
+          </>
+        ) : null}
+
+        {activePane === 'changes' ? (
+          <section className="agent-writing-panel">
+            <h3>变更包 <span className="status-chip status-chip--slim">{pendingItems.length > 0 ? '待确认' : '未生成'}</span></h3>
+            <p>同步前保护点会保存正文、故事状态、平台规则和能力包。所有改动需要确认后才会写回。</p>
+            <div className="agent-writing-change-summary">
+              {pendingItems.length > 0 ? (
+                pendingItems.map((item) => (
+                  <div key={item.itemId} className="agent-writing-change-row">
+                    <span>✓</span>
+                    <div><b>{item.title}</b><small>{item.body}</small></div>
+                    {item.proposalId ? (
+                      <div className="agent-writing-card__actions">
+                        <button type="button" className="primary-button" onClick={() => onApplyProposal(item.proposalId as string)}>采纳</button>
+                        <button type="button" className="ghost-button" onClick={() => onRejectProposal(item.proposalId as string)}>丢弃</button>
+                      </div>
+                    ) : (
+                      <small>{item.kind}</small>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="agent-writing-change-row">
+                  <span>!</span>
+                  <div><b>等待 Agent 生成变更包</b><small>点击下方按钮先读上下文，再生成可确认建议。</small></div>
+                  <button type="button" className="primary-button" onClick={() => onStartTask('请生成一个待确认变更包。')}>生成</button>
+                </div>
+              )}
+            </div>
+            {latestRecord ? (
+              <div className="diff-card">
+                <div>
+                  <span>原文</span>
+                  <p>{latestRecord.beforePreview}</p>
+                </div>
+                <div>
+                  <span>提议</span>
+                  <p>{latestRecord.afterPreview}</p>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {activePane === 'risk' ? (
+          <section className="agent-writing-panel">
+            <h3>发布避雷 <span className="status-chip status-chip--slim status-chip--muted">{publishRiskLabel}</span></h3>
+            <p>目标平台规则会作为能力包读取。当前不会直接改正文，只生成建议或变更包。</p>
+            <div className="agent-writing-line-item">
+              <header><strong>{publishingFinding?.diagnosis ?? '等待平台检查'}</strong><small>{publishingFinding?.area ?? '未生成'}</small></header>
+              <p>
+                {publishingFinding?.recommendation ??
+                  latestPublishFeedback ??
+                  '可以让 Agent 按番茄、起点或自定义口径检查敏感表达、节奏和发布风险。'}
+              </p>
+              <div className="agent-writing-capsules">
+                <span className="memory-chip">平台规则包</span>
+                <span className="memory-chip">发布避雷</span>
+              </div>
+            </div>
+            <div className="agent-writing-card__actions">
+              <button type="button" className="primary-button" onClick={() => onStartTask('请按目标平台给当前章做发布避雷检查，并生成待确认建议。')}>
+                按建议检查
+              </button>
+              <button type="button" className="ghost-button" onClick={() => onStartTask('记录这次发布风险，但不要修改正文。')}>
+                忽略并记录
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {activePane === 'clock' ? (
+          <section className="agent-writing-panel">
+            <h3>故事时光机</h3>
+            <p>最近一次 AI 更新可以完整撤回，也可以只撤回人物线、伏笔线或发布风险。真实保护点由 Lime App Server 写入。</p>
+            <div className="agent-writing-line-item">
+              <header><strong>同步前保护点</strong><small>{chapterDocument?.lastEditedAt ?? '当前'}</small></header>
+              <p>包含正文、设定、人物线、伏笔线、平台规则和启用能力包。</p>
+            </div>
+            <div className="agent-writing-line-item">
+              <header><strong>可撤回范围</strong><small>3 类</small></header>
+              <div className="agent-writing-capsules">
+                <span className="memory-chip">人物线</span>
+                <span className="memory-chip">伏笔线</span>
+                <span className="memory-chip">发布风险</span>
+              </div>
+            </div>
+            <div className="agent-writing-card__actions">
+              <button type="button" className="ghost-button" onClick={() => onStartTask('请撤回最近一次 AI 更新，并说明会影响哪些故事资产。')}>
+                撤回这次更新
+              </button>
+              <button type="button" className="primary-button" onClick={() => onStartTask('请说明当前章节最近一次同步前保护点包含哪些内容，不要修改正文。')}>
+                说明保护点
+              </button>
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </aside>
+  )
+}
 
 export const NovelWorkbench = ({
   shell,
@@ -1566,6 +2062,8 @@ export const NovelWorkbench = ({
   const [isFocusMode, setFocusMode] = useState(false)
   const [isStructurePanelCollapsed, setStructurePanelCollapsed] = useState(false)
   const [isAgentSidebarCollapsed, setAgentSidebarCollapsed] = useState(false)
+  const [isWritingInspectorCollapsed, setWritingInspectorCollapsed] = useState(false)
+  const [writingInspectorPane, setWritingInspectorPane] = useState<WritingInspectorPane>('state')
   const [createProjectForm, setCreateProjectForm] = useState<CreateProjectFormState>(buildDefaultCreateProjectForm)
   const isAnalysisToolActive = activeSurface === 'feature-center' && activeFeatureTool === 'analysis'
   const analysis = useAnalysisWorkbenchState(shell)
@@ -1576,12 +2074,28 @@ export const NovelWorkbench = ({
   const workspaceSearch = useWorkspaceSearch(shell.workspacePath)
   const agentRuntimeMode = agentSettingsState?.mode ?? 'legacy'
   const agentRuntimeLabel = agentSettingsState ? runtimeProviderLabel[agentSettingsState.resolvedProvider] : '本地规则模式'
+  const [renderedChapterId, setRenderedChapterId] = useState(activeChapterId ?? shell.chapterTree[0]?.chapterId)
+  const renderedChapter =
+    shell.chapterTree.find((chapter) => chapter.chapterId === renderedChapterId) ??
+    shell.chapterTree.find((chapter) => chapter.chapterId === activeChapterId) ??
+    shell.chapterTree[0]
+  const selectedScene = shell.sceneList.find((scene) => scene.sceneId === selectedSceneId) ?? shell.sceneList[0]
 
   useEffect(() => {
     if (!shell.sceneList.some((scene) => scene.sceneId === selectedSceneId)) {
       setSelectedSceneId(shell.sceneList[0]?.sceneId)
     }
   }, [selectedSceneId, shell.sceneList])
+
+  useEffect(() => {
+    setRenderedChapterId(activeChapterId ?? shell.chapterTree[0]?.chapterId)
+  }, [activeChapterId, shell.workspacePath])
+
+  useEffect(() => {
+    if (!renderedChapterId || !shell.chapterTree.some((chapter) => chapter.chapterId === renderedChapterId)) {
+      setRenderedChapterId(activeChapterId ?? shell.chapterTree[0]?.chapterId)
+    }
+  }, [activeChapterId, renderedChapterId, shell.chapterTree])
 
   useEffect(() => {
     if (!isCreatingProject) {
@@ -1672,7 +2186,8 @@ export const NovelWorkbench = ({
     'workspace-grid',
     activeSurface === 'writing' ? 'workspace-grid--writing' : '',
     !isFocusMode && isStructurePanelCollapsed ? 'workspace-grid--structure-collapsed' : '',
-    !isFocusMode && isAgentSidebarCollapsed ? 'workspace-grid--agent-collapsed' : '',
+    !isFocusMode && activeSurface !== 'writing' && isAgentSidebarCollapsed ? 'workspace-grid--agent-collapsed' : '',
+    !isFocusMode && activeSurface === 'writing' && isWritingInspectorCollapsed ? 'workspace-grid--writing-inspector-collapsed' : '',
     isFocusMode ? 'workspace-grid--focus' : ''
   ]
     .filter(Boolean)
@@ -1918,8 +2433,9 @@ export const NovelWorkbench = ({
                   <WritingStructurePanel
                     shell={shell}
                     chapterId={activeChapterId}
+                    renderedChapterId={renderedChapter?.chapterId}
                     selectedSceneId={selectedSceneId}
-                    onSelectChapter={onSelectChapter}
+                    onPreviewChapter={setRenderedChapterId}
                     onSelectScene={setSelectedSceneId}
                     onStartTask={onStartTask}
                   />
@@ -1993,9 +2509,15 @@ export const NovelWorkbench = ({
               <WritingSurface
                 shell={shell}
                 chapterDocument={chapterDocument}
-                selectedSceneId={selectedSceneId}
-                onSelectScene={setSelectedSceneId}
+                renderedChapter={renderedChapter}
+                selectedScene={selectedScene}
+                feedState={feedState}
+                activityLabel={activityLabel}
+                runtimeLabel={agentRuntimeLabel}
+                onSelectChapter={onSelectChapter}
                 onStartTask={onStartTask}
+                onApplyProposal={onApplyProposal}
+                onRejectProposal={onRejectProposal}
                 onSaveChapter={onSaveChapter}
               />
             ) : null}
@@ -2064,17 +2586,40 @@ export const NovelWorkbench = ({
             ) : null}
           </main>
 
-          {!isFocusMode ? (
+          {!isFocusMode && activeSurface === 'writing' ? (
+            isWritingInspectorCollapsed ? (
+              <WritingInspectorRail
+                activePane={writingInspectorPane}
+                onPaneChange={setWritingInspectorPane}
+                onExpand={() => setWritingInspectorCollapsed(false)}
+              />
+            ) : (
+              <AgentWritingInspector
+                shell={shell}
+                chapterDocument={chapterDocument}
+                renderedChapter={renderedChapter}
+                selectedScene={selectedScene}
+                feedState={feedState}
+                runtimeLabel={agentRuntimeLabel}
+                activePane={writingInspectorPane}
+                onPaneChange={setWritingInspectorPane}
+                onCollapse={() => setWritingInspectorCollapsed(true)}
+                onStartTask={onStartTask}
+                onApplyProposal={onApplyProposal}
+                onRejectProposal={onRejectProposal}
+              />
+            )
+          ) : null}
+
+          {!isFocusMode && activeSurface !== 'writing' ? (
             isAgentSidebarCollapsed ? (
               <AgentSidebarRail
-                className={activeSurface === 'writing' ? 'agent-sidebar-rail--writing' : undefined}
                 mode={sidebarMode}
                 onModeChange={onSidebarModeChange}
                 onExpand={() => setAgentSidebarCollapsed(false)}
               />
             ) : (
               <AgentSidebar
-                className={activeSurface === 'writing' ? 'agent-sidebar--writing' : undefined}
                 mode={sidebarMode}
                 onModeChange={onSidebarModeChange}
                 header={feedState.header}
