@@ -9,6 +9,9 @@
     "apps/*",
     "packages/*"
   ],
+  "config": {
+    "forge": "./forge.config.cjs"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
@@ -16,11 +19,17 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && electron-vite build",
     "dist": "npm run build && electron-builder --publish never",
+    "dist:publish": "npm run build && electron-builder --publish always",
     "dist:mac": "npm run dist:mac:arm64 && npm run dist:mac:x64",
     "dist:mac:arm64": "npm run build && electron-builder --mac dmg zip --arm64 --publish never",
     "dist:mac:x64": "npm run build && electron-builder --mac dmg zip --x64 --publish never",
     "dist:win": "npm run build && electron-builder --win nsis zip --publish never",
     "dist:linux": "npm run build && electron-builder --linux AppImage tar.gz --publish never",
+    "forge:package": "npm run build && electron-forge package",
+    "forge:make": "npm run build && electron-forge make",
+    "forge:make:mac": "npm run build && electron-forge make --platform darwin",
+    "forge:make:win": "npm run build && electron-forge make --platform win32",
+    "forge:make:linux": "npm run build && electron-forge make --platform linux",
     "governance:legacy-report": "node scripts/governance-legacy-report.mjs",
     "test:contracts": "node scripts/governance-legacy-report.mjs --contracts",
     "verify:runtime-smoke": "node scripts/runtime-smoke.mjs",
@@ -33,10 +42,17 @@
     "@tiptap/extension-placeholder": "^2.26.1",
     "@tiptap/react": "^2.26.1",
     "@tiptap/starter-kit": "^2.26.1",
+    "electron-updater": "^6.8.9",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-deb": "^7.11.2",
+    "@electron-forge/maker-dmg": "^7.11.2",
+    "@electron-forge/maker-rpm": "^7.11.2",
+    "@electron-forge/maker-squirrel": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.11.2",
     "@types/node": "^22.18.6",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",

@@ -1,0 +1,4 @@
+provider: github
+owner: limecloud
+repo: lime-novel
+updaterCacheDirName: lime-novel-updater

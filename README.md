@@ -155,9 +155,10 @@ node scripts/sync-version.mjs 0.5.0
 
 1. 按目标版本同步工作区 `package.json` 版本
 2. 在对应平台执行 `electron-builder`
-3. macOS 按 `arm64` 与 `x64` 两条独立流水线分别产出直装包
-4. 上传平台产物
-5. 汇总产物并创建 GitHub Draft Release
+3. 生成 `electron-updater` 所需的 `latest.yml`、`latest-mac.yml`、`latest-linux.yml` 更新索引
+4. macOS 按 `arm64` 与 `x64` 两条独立流水线分别产出直装包，并在发布任务里合并 `latest-mac.yml`
+5. 上传平台产物
+6. 汇总产物并创建 GitHub Draft Release
 
 当前默认产物：
 
@@ -168,9 +169,34 @@ node scripts/sync-version.mjs 0.5.0
 
 说明：
 
+- 桌面端启动后会在打包环境自动调用 `electron-updater` 检查 GitHub Release；开发环境默认不检查，可设置 `LIME_NOVEL_FORCE_UPDATE_CHECK=true` 使用 `dev-app-update.yml` 调试
+- 自动更新依赖已发布的 GitHub Release，Draft Release 对客户端不可见；Release workflow 默认仍创建 draft，人工确认后发布
 - macOS 发布链参考了 Lime 主仓库的双机型思路，分别在 Apple Silicon 与 Intel runner 上构建，避免用户下载后再做架构转换判断
 - macOS 流程当前默认关闭自动代码签名发现，优先保证 unsigned 构建可产出
 - 如果后续接入苹果签名、公证或 Windows 代码签名，只需要在 release workflow 里补环境变量与签名步骤
+- `electron-builder` 是当前自动更新发布链路，`electron-forge` 用于额外 package/make 能力
+
+### Electron Forge
+
+Forge 配置文件：
+
+- `forge.config.cjs`
+
+可用命令：
+
+```bash
+npm run forge:package
+npm run forge:make
+npm run forge:make:mac
+npm run forge:make:win
+npm run forge:make:linux
+```
+
+说明：
+
+- Forge 复用 `electron-vite` 的 `out/` 产物，输出目录为 `out-forge/`
+- Forge package 会携带 `build/app-update.yml`，但 Forge maker 不负责生成 `electron-updater` 的 release 更新索引
+- 需要可自动更新的正式发布包时，继续使用 `electron-builder` / Release workflow
 
 ## 发版建议
 

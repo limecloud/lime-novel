@@ -26,7 +26,7 @@ const alias = {
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin(), copyAppServerBackendPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['electron-updater'] }), copyAppServerBackendPlugin()],
     resolve: {
       alias
     },

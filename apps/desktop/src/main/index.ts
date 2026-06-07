@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createDesktopServices } from './composition-root/create-desktop-services'
 import { registerDesktopIpc } from './ipc/register-desktop-ipc'
+import { startDesktopAutoUpdater } from './updates/desktop-auto-updater'
 
 let mainWindow: BrowserWindow | null = null
 let unsubscribeRuntime: (() => void) | null = null
@@ -69,6 +70,7 @@ const bootstrap = async (): Promise<void> => {
   mainWindow = createMainWindow()
   unsubscribeRuntime = registerDesktopIpc(mainWindow, services)
   await loadMainWindow(mainWindow)
+  startDesktopAutoUpdater()
 
   mainWindow.on('closed', () => {
     mainWindow = null

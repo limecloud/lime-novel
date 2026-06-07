@@ -1,6 +1,7 @@
 node_modules
 dist
 out
+out-forge
 .DS_Store
 .playwright-mcp/
 playground/demo-project/.lime/runtime/project.db
